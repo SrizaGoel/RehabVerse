@@ -1,0 +1,42 @@
+{
+  "front_hold": 60.0,
+  "side_hold": 60.0,
+  "week": "2026-W24",
+  "paint_done": false,
+  "belle_pose_sessions": [
+    {
+      "date": "2026-06-12 22:11",
+      "scores": {
+        "First Position": {
+          "similarity": 94.5,
+          "stability": 100.0
+        },
+        "Second Position": {
+          "similarity": 96.0,
+          "stability": 100.0
+        },
+        "Belle Pose": {
+          "similarity": 80.8,
+          "stability": 100.0
+        }
+      }
+    },
+    {
+      "date": "2026-06-12 22:14",
+      "scores": {
+        "First Position": {
+          "similarity": 96.5,
+          "stability": 100.0
+        },
+        "Second Position": {
+          "similarity": 95.6,
+          "stability": 100.0
+        },
+        "Belle Pose": {
+          "similarity": 82.1,
+          "stability": 100.0
+        }
+      }
+    }
+  ]
+}
