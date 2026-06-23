@@ -1,0 +1,19 @@
+{
+  "days": [
+    {
+      "date": "2026-06-23",
+      "arm": "LEFT",
+      "rom": 0,
+      "hold": 0
+    },
+    {
+      "date": "2026-06-23",
+      "arm": "RIGHT",
+      "rom": 0,
+      "hold": 0
+    }
+  ],
+  "week": 1,
+  "hold_target": 3,
+  "trend": "STEADY"
+}

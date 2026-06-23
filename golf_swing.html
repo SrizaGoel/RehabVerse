@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RehabVerse — Golf Swing (Motion Tracked)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(180deg,#87CEEB 0%,#a8d8ea 40%,#cfeec0 60%,#3a8c3a 100%);
+    overflow: hidden; height: 100vh; display:flex; flex-direction:column;
+  }
+  #hud {
+    position: relative; z-index: 5;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 16px; background: rgba(20,30,20,0.6); color:#fff;
+    font-size: 13px; flex-wrap: wrap; gap: 8px;
+  }
+  #hud .stat { text-align:center; min-width:64px; }
+  #hud .stat b { display:block; font-size:17px; color:#ffd24c; }
+  #title { font-weight:700; font-size:15px; letter-spacing:0.5px; }
+  #weekBadge { background:#1e5c2b; padding:4px 10px; border-radius:12px; font-size:12px; }
+  #main { position: relative; flex: 1; display:flex; }
+  #gameCanvas { flex:1; display:block; cursor:default; }
+  #camPanel {
+    position:absolute; top:10px; right:10px; width:200px; height:150px;
+    border-radius:10px; overflow:hidden; border:2px solid rgba(255,255,255,0.6);
+    box-shadow:0 4px 14px rgba(0,0,0,0.4); background:#000; z-index:6;
+  }
+  #camPanel video, #camPanel canvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+  #camPanel video { transform: scaleX(-1); }
+  #camPanel canvas { transform: scaleX(-1); }
+  #setupOverlay {
+    position:absolute; inset:0; background:rgba(10,20,10,0.88); color:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; z-index:20; padding:20px;
+  }
+  #setupOverlay h2 { margin:0 0 8px; }
+  #setupOverlay p { max-width:480px; opacity:0.9; line-height:1.5; font-size:14px; }
+  .armBtns { display:flex; gap:14px; margin:18px 0; }
+  .armBtns button {
+    background:#2c7a3a; color:#fff; border:none; padding:12px 22px; border-radius:10px;
+    font-size:15px; cursor:pointer;
+  }
+  .armBtns button:hover { background:#39a04a; }
+  #startBtn {
+    margin-top:8px; background:#ffd24c; color:#222; border:none; padding:12px 28px;
+    border-radius:10px; font-size:16px; font-weight:700; cursor:pointer; display:none;
+  }
+  #startBtn:hover { background:#ffdd75; }
+  #calibStatus { margin-top:10px; font-size:13px; color:#ffd24c; min-height:18px; }
+  #message {
+    position:absolute; top:14%; left:50%; transform:translateX(-50%);
+    color:#fff; font-size:32px; font-weight:800; text-shadow:0 2px 8px rgba(0,0,0,0.6);
+    pointer-events:none; opacity:0; transition:opacity .25s; z-index:7;
+  }
+  #message.show { opacity:1; }
+  #instructions {
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    color:#fff; background:rgba(0,0,0,0.45); padding:7px 16px; border-radius:20px;
+    font-size:12.5px; pointer-events:none; text-align:center; max-width:92%; z-index:6;
+  }
+  #armAngleBar {
+    position:absolute; left:14px; top:10px; width:26px; height:200px; z-index:6;
+    background:rgba(0,0,0,0.35); border-radius:14px; overflow:hidden;
+  }
+  #armAngleBar .fillBar {
+    position:absolute; bottom:0; width:100%; background:linear-gradient(180deg,#ffd24c,#4caf50);
+    height:0%; transition: height .05s linear;
+  }
+  #armAngleLabel { position:absolute; left:8px; top:215px; color:#fff; font-size:11px; z-index:6; text-shadow:0 1px 3px #000; }
+  #resetBtn {
+    background:#444; color:#fff; border:none; padding:5px 10px; border-radius:6px;
+    font-size:12px; cursor:pointer;
+  }
+  #resetBtn:hover{ background:#666; }
+  #recalibBtn {
+    position:absolute; top:170px; right:10px; z-index:6; background:rgba(0,0,0,0.5);
+    color:#fff; border:none; padding:4px 8px; border-radius:6px; font-size:11px; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="title">⛳ RehabVerse — Golf Swing (Arm Tracked)</div>
+  <div class="stat">Day<b id="dayStat">1</b></div>
+  <div class="stat">Goals Today<b id="goalsTodayStat">0</b></div>
+  <div class="stat">Best Score<b id="bestScoreStat">0</b></div>
+  <div class="stat">Abduction<b id="angleStat">--°</b></div>
+  <div class="stat">Arm Speed<b id="speedStat">-- °/s</b></div>
+  <div id="weekBadge">Week <span id="weekNum">1</span> · Difficulty <span id="diffNum">1</span></div>
+  <button id="resetBtn" title="Reset all saved progress">Reset Progress</button>
+</div>
+
+<div id="main">
+  <canvas id="gameCanvas"></canvas>
+  <div id="armAngleBar">
+    <div class="fillBar" id="armFillBar"></div>
+    <div id="targetZone" style="position:absolute;left:0;width:100%;background:rgba(255,255,255,0.35);border-top:2px solid #fff;border-bottom:2px solid #fff;"></div>
+  </div>
+  <div id="armAngleLabel">Live<br>angle</div>
+  <div id="camPanel">
+    <video id="video" playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+  <button id="recalibBtn">Recalibrate</button>
+  <div id="message"></div>
+  <div id="instructions">Stand so both shoulders/arms are visible. Lower your arms to your sides, then swing them up together like a real golf swing to hit the ball.</div>
+
+  <div id="setupOverlay">
+    <h2>⛳ Motion-Tracked Golf Swing</h2>
+    <p>This exercise uses your webcam to track real shoulder abduction movement for rehab. Choose Both Arms for a natural two-handed golf swing, or a single arm if you're working one side specifically. Then calibrate by holding your arm(s) down, then raised.</p>
+    <div class="armBtns">
+      <button id="bothArmsBtn">Both Arms (Real Swing)</button>
+      <button id="rightArmBtn">Right Arm Only</button>
+      <button id="leftArmBtn">Left Arm Only</button>
+    </div>
+    <div id="calibStatus"></div>
+    <button id="startBtn">Start Exercise</button>
+  </div>
+</div>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const octx = overlay.getContext('2d');
+const setupOverlay = document.getElementById('setupOverlay');
+const calibStatus = document.getElementById('calibStatus');
+const startBtn = document.getElementById('startBtn');
+const bothArmsBtn = document.getElementById('bothArmsBtn');
+const rightArmBtn = document.getElementById('rightArmBtn');
+const leftArmBtn = document.getElementById('leftArmBtn');
+const recalibBtn = document.getElementById('recalibBtn');
+const armFillBar = document.getElementById('armFillBar');
+
+let chosenArm = null; // 'right' | 'left' | 'both'
+let poseLandmarker = null;
+let calibrated = false;
+let calib = { downAngle: null, upAngle: null };
+let calibPhase = 0; // 0 = waiting for arm-down sample, 1 = waiting for arm-up sample, 2 = done
+
+// ---------- Camera + Model setup ----------
+async function setupCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { width:320, height:240 }, audio:false });
+  video.srcObject = stream;
+  await new Promise(res => { video.onloadedmetadata = () => res(); });
+  video.play();
+  overlay.width = video.videoWidth || 320;
+  overlay.height = video.videoHeight || 240;
+}
+
+async function setupPose(){
+  const filesetResolver = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  poseLandmarker = await PoseLandmarker.createFromOptions(filesetResolver, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numPoses: 1
+  });
+}
+
+bothArmsBtn.addEventListener('click', () => chooseArm('both'));
+rightArmBtn.addEventListener('click', () => chooseArm('right'));
+leftArmBtn.addEventListener('click', () => chooseArm('left'));
+
+async function chooseArm(arm){
+  chosenArm = arm;
+  bothArmsBtn.disabled = true; rightArmBtn.disabled = true; leftArmBtn.disabled = true;
+  calibStatus.textContent = 'Starting camera…';
+  try {
+    await setupCamera();
+    calibStatus.textContent = 'Loading motion model…';
+    await setupPose();
+    calibStatus.textContent = 'Calibrating: hold your arm DOWN at your side…';
+    calibPhase = 0;
+    requestAnimationFrame(detectLoop);
+  } catch(err){
+    calibStatus.textContent = 'Camera/model error: ' + err.message + '. Check permissions and reload.';
+    rightArmBtn.disabled = false; leftArmBtn.disabled = false; bothArmsBtn.disabled = false;
+  }
+}
+
+startBtn.addEventListener('click', () => {
+  setupOverlay.style.display = 'none';
+  resetSession();
+});
+
+recalibBtn.addEventListener('click', () => {
+  calibrated = false;
+  calibPhase = 0;
+  setupOverlay.style.display = 'flex';
+  startBtn.style.display = 'none';
+  calibStatus.textContent = 'Recalibrating: hold your arm DOWN at your side…';
+});
+
+// ---------- Angle math ----------
+// landmarks indices (MediaPipe Pose): 11/12 shoulders, 13/14 elbows, 15/16 wrists
+function angleOfAbduction(shoulder, elbow){
+  // vector shoulder->elbow vs straight-down vector (0,1)
+  const vx = elbow.x - shoulder.x;
+  const vy = elbow.y - shoulder.y;
+  const mag = Math.hypot(vx,vy) || 1e-6;
+  const dot = (vx*0 + vy*1); // straight down = (0,1) in normalized image coords
+  let cos = dot/mag;
+  cos = Math.max(-1, Math.min(1, cos));
+  let deg = Math.acos(cos) * 180/Math.PI; // 0 = arm straight down, 180 = straight up
+  return deg;
+}
+
+let angleHistory = []; // {t, angle}
+let smoothedAngle = 0;
+let lastVelocity = 0;
+let calibSamples = [];
+
+let swingState = 'idle'; // idle | rising | cooldown
+let swingPeakVel = 0;
+let swingPeakAngle = 0;
+let swingStartT = 0;
+const SWING_VEL_THRESHOLD = 70; // deg/s to start counting as a swing
+const COOLDOWN_MS = 900;
+let cooldownUntil = 0;
+
+function detectLoop(){
+  if (poseLandmarker && video.readyState >= 2) {
+    const result = poseLandmarker.detectForVideo(video, performance.now());
+    octx.clearRect(0,0,overlay.width,overlay.height);
+    if (result.landmarks && result.landmarks.length > 0) {
+      const lm = result.landmarks[0];
+      drawSkeleton(lm);
+      processArm(lm);
+    }
+  }
+  requestAnimationFrame(detectLoop);
+}
+
+function drawSkeleton(lm){
+  octx.fillStyle = '#ffd24c';
+  octx.strokeStyle = '#4caf50';
+  octx.lineWidth = 3;
+  const pts = [11,12,13,14,15,16,23,24];
+  function P(i){ return { x: lm[i].x*overlay.width, y: lm[i].y*overlay.height }; }
+  const pairs = [[11,13],[13,15],[12,14],[14,16],[11,12],[11,23],[12,24]];
+  pairs.forEach(([a,b])=>{
+    const pa=P(a), pb=P(b);
+    octx.beginPath(); octx.moveTo(pa.x,pa.y); octx.lineTo(pb.x,pb.y); octx.stroke();
+  });
+  pts.forEach(i=>{
+    const p = P(i);
+    octx.beginPath(); octx.arc(p.x,p.y,4,0,Math.PI*2); octx.fill();
+  });
+}
+
+function processArm(lm){
+  if (!chosenArm) return;
+  // MediaPipe landmark indices: 11=left shoulder,12=right shoulder,13=left elbow,14=right elbow,15=left wrist,16=right wrist
+  let rawAngle;
+  if (chosenArm === 'both') {
+    const lS=lm[11], lE=lm[13], rS=lm[12], rE=lm[14];
+    if (!lS || !lE || !rS || !rE) return;
+    const leftAngle = angleOfAbduction(lS, lE);
+    const rightAngle = angleOfAbduction(rS, rE);
+    rawAngle = (leftAngle + rightAngle) / 2; // both arms moving together, like gripping a club with both hands
+  } else {
+    const shoulderIdx = chosenArm === 'right' ? 12 : 11;
+    const elbowIdx = chosenArm === 'right' ? 14 : 13;
+    const shoulder = lm[shoulderIdx], elbow = lm[elbowIdx];
+    if (!shoulder || !elbow) return;
+    rawAngle = angleOfAbduction(shoulder, elbow);
+  }
+
+  smoothedAngle = smoothedAngle*0.6 + rawAngle*0.4;
+
+  const now = performance.now();
+  angleHistory.push({t:now, angle:smoothedAngle});
+  while (angleHistory.length > 12) angleHistory.shift();
+
+  let velocity = 0;
+  if (angleHistory.length >= 2) {
+    const first = angleHistory[0], last = angleHistory[angleHistory.length-1];
+    const dt = (last.t - first.t)/1000;
+    if (dt > 0.001) velocity = (last.angle - first.angle)/dt;
+  }
+  lastVelocity = velocity;
+
+  if (!calibrated) {
+    handleCalibration(smoothedAngle);
+    updateLiveBar(smoothedAngle);
+    return;
+  }
+
+  updateLiveBar(smoothedAngle);
+  document.getElementById('angleStat').textContent = Math.round(smoothedAngle) + '°';
+  document.getElementById('speedStat').textContent = Math.round(Math.abs(velocity)) + ' °/s';
+
+  if (window.__rehabGameActive) {
+    runSwingStateMachine(now, smoothedAngle, velocity);
+  }
+}
+
+function updateLiveBar(angle){
+  const lo = calib.downAngle ?? 0, hi = calib.upAngle ?? 170;
+  const pct = Math.max(0, Math.min(100, ((angle - lo) / Math.max(1,(hi-lo))) * 100));
+  armFillBar.style.height = pct + '%';
+  if (window.__currentHoleZone) {
+    const z = window.__currentHoleZone;
+    const zoneTopPct = Math.min(100, (z.center + z.tolerance)*100);
+    const zoneBotPct = Math.max(0, (z.center - z.tolerance)*100);
+    const bar = document.getElementById('targetZone');
+    bar.style.bottom = zoneBotPct + '%';
+    bar.style.height = Math.max(2, (zoneTopPct - zoneBotPct)) + '%';
+  }
+}
+
+function handleCalibration(angle){
+  if (calibPhase === 0) {
+    calibSamples.push(angle);
+    if (calibSamples.length > 20) {
+      calib.downAngle = avg(calibSamples);
+      calibSamples = [];
+      calibPhase = 1;
+      calibStatus.textContent = 'Now raise your arm OUT TO THE SIDE / up and hold…';
+    }
+  } else if (calibPhase === 1) {
+    if (angle > (calib.downAngle + 25)) {
+      calibSamples.push(angle);
+      if (calibSamples.length > 20) {
+        calib.upAngle = avg(calibSamples);
+        calibPhase = 2;
+        calibrated = true;
+        calibStatus.textContent = `Calibrated! Down ≈ ${Math.round(calib.downAngle)}°, Up ≈ ${Math.round(calib.upAngle)}°.`;
+        startBtn.style.display = 'inline-block';
+      }
+    } else {
+      calibSamples = [];
+    }
+  }
+}
+function avg(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length; }
+
+function runSwingStateMachine(now, angle, velocity){
+  if (now < cooldownUntil) return;
+  if (window.__ballFlying) return;
+
+  if (swingState === 'idle') {
+    if (velocity > SWING_VEL_THRESHOLD) {
+      swingState = 'rising';
+      swingStartT = now;
+      swingPeakVel = velocity;
+      swingPeakAngle = angle;
+    }
+  } else if (swingState === 'rising') {
+    if (velocity > swingPeakVel) { swingPeakVel = velocity; swingPeakAngle = angle; }
+    if (velocity < SWING_VEL_THRESHOLD*0.4 || now - swingStartT > 600) {
+      // swing finished — fire it
+      window.__triggerSwing(swingPeakVel, swingPeakAngle, calib);
+      swingState = 'cooldown';
+      cooldownUntil = now + COOLDOWN_MS;
+      setTimeout(()=>{ swingState='idle'; }, COOLDOWN_MS);
+    }
+  }
+}
+
+// expose for game logic below
+window.__poseReady = true;
+</script>
+
+<script>
+(function(){
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const wrap = document.getElementById('main');
+
+  function resize(){ canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+
+  window.__ballFlying = false;
+  window.__rehabGameActive = false;
+
+  // ---------- Persistence ----------
+  const STORAGE_KEY = 'rehabverse_golf_motion_progress_v1';
+  function loadProgress(){
+    try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw); } catch(e){}
+    return null;
+  }
+  function defaultProgress(){
+    const today = new Date().toISOString().slice(0,10);
+    return { firstDay: today, lastPlayedDay: today, dayIndex: 1, bestScore: 0, history: [] };
+  }
+  let progress = loadProgress() || defaultProgress();
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  (function rollover(){
+    const t = todayStr();
+    if (progress.lastPlayedDay !== t) {
+      progress.dayIndex = Math.min(progress.dayIndex + 1, 42);
+      progress.lastPlayedDay = t;
+      save();
+    }
+  })();
+  function save(){ try { localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)); } catch(e){} }
+  function week(){ return Math.min(6, Math.ceil(progress.dayIndex/7)); }
+  function diff(){ return week(); }
+
+  document.getElementById('resetBtn').addEventListener('click', function(){
+    if (confirm('Reset all RehabVerse golf progress?')) {
+      progress = defaultProgress(); save(); refreshHud(); resetSession();
+    }
+  });
+
+  let session = { goalsToday:0, attemptsToday:0, streak:0, angles:[], speeds:[] };
+  function loadTodaySession(){
+    const t = todayStr();
+    const e = progress.history.find(h=>h.date===t);
+    session.goalsToday = e ? e.goals : 0;
+    session.attemptsToday = e ? e.attempts : 0;
+  }
+  loadTodaySession();
+  window.resetSession = function(){
+    session = {goalsToday:0,attemptsToday:0,streak:0,angles:[],speeds:[]};
+    loadTodaySession();
+    window.__rehabGameActive = true;
+    refreshHud();
+  };
+
+  function commitHistory(){
+    const t = todayStr();
+    let e = progress.history.find(h=>h.date===t);
+    const avgAngle = session.angles.length ? Math.round(session.angles.reduce((a,b)=>a+b,0)/session.angles.length) : 0;
+    const avgSpeed = session.speeds.length ? Math.round(session.speeds.reduce((a,b)=>a+b,0)/session.speeds.length) : 0;
+    if (!e) { e = {day:progress.dayIndex,date:t,goals:0,attempts:0,avgAngle:0,avgSpeed:0,bestStreak:0}; progress.history.push(e); }
+    e.goals = session.goalsToday; e.attempts = session.attemptsToday;
+    e.avgAngle = avgAngle; e.avgSpeed = avgSpeed;
+    e.bestStreak = Math.max(e.bestStreak||0, session.streak);
+    save();
+  }
+
+  function refreshHud(){
+    document.getElementById('dayStat').textContent = progress.dayIndex;
+    document.getElementById('goalsTodayStat').textContent = session.goalsToday;
+    document.getElementById('bestScoreStat').textContent = progress.bestScore;
+    document.getElementById('weekNum').textContent = week();
+    document.getElementById('diffNum').textContent = diff();
+  }
+  refreshHud();
+
+  // ---------- World ----------
+  let ball, hole, score = 0, trail = [];
+  function groundY(){ return canvas.height*0.78; }
+  function horizonY(){ return canvas.height*0.42; }
+  function newHole(){
+    const d = diff();
+    // Hole stays centered — aim isn't controlled by abduction alone, so accuracy
+    // is based on reaching the right POWER ZONE (abduction range), not left/right position.
+    hole = {
+      xFrac: 0.5,
+      depthFrac: Math.min(0.92, 0.55 + d*0.06 + (Math.random()*0.04-0.02)),
+      radius: Math.max(10, 26 - d*2.2),
+      requiredAngleNorm: 0.45 + d*0.06,        // target zone center, grows with difficulty
+      tolerance: Math.max(0.10, 0.30 - d*0.03)  // generous early, tightens by week 6
+    };
+    window.__currentHoleZone = { center: hole.requiredAngleNorm, tolerance: hole.tolerance };
+  }
+  function newBall(){ ball = {x:canvas.width/2,y:groundY(),z:0,lateral:0,power:0,resolved:false}; }
+  newHole(); newBall();
+
+  function showMessage(text,color){
+    const m=document.getElementById('message');
+    m.textContent=text; m.style.color=color||'#fff';
+    m.classList.add('show'); setTimeout(()=>m.classList.remove('show'),1100);
+  }
+
+  // Called from pose detector when a swing fires
+  window.__triggerSwing = function(peakVel, peakAngle, calib){
+    if (window.__ballFlying) return;
+    window.__ballFlying = true;
+    session.attemptsToday++;
+    session.angles.push(Math.round(peakAngle));
+    session.speeds.push(Math.round(peakVel));
+    if (session.angles.length>200) session.angles.shift();
+    if (session.speeds.length>200) session.speeds.shift();
+
+    const lo = calib.downAngle ?? 0, hi = calib.upAngle ?? 170;
+    const norm = Math.max(0, Math.min(1, (peakAngle - lo)/Math.max(1,(hi-lo))));
+    const speedNorm = Math.max(0.15, Math.min(1.4, peakVel/260));
+
+    ball.power = norm; // how far up the abduction range -> drives accuracy target
+    ball.speedNorm = speedNorm;
+    ball.lateral = (norm-0.5)*0.6;
+    ball.z = 0;
+  };
+
+  function endShot(success){
+    window.__ballFlying = false;
+    if (success) {
+      session.goalsToday++; session.streak++; score++;
+      if (score>progress.bestScore) progress.bestScore=score;
+      showMessage('GOAL! 🎉','#ffd24c'); newHole();
+    } else {
+      session.streak=0; showMessage('Missed — try again','#ff8a80');
+    }
+    commitHistory(); refreshHud(); newBall();
+  }
+
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function projX(xFrac,depthFrac){
+    const centerX=canvas.width/2;
+    const spread=lerp(canvas.width*0.9, canvas.width*0.05, depthFrac);
+    return centerX+(xFrac-0.5)*spread;
+  }
+  function projY(depthFrac){ return lerp(groundY(), horizonY(), depthFrac); }
+  function scaleAt(depthFrac){ return lerp(1,0.18,depthFrac); }
+
+  function drawField(){
+    let skyGrad=ctx.createLinearGradient(0,0,0,horizonY());
+    skyGrad.addColorStop(0,'#87CEEB'); skyGrad.addColorStop(1,'#cfeec0');
+    ctx.fillStyle=skyGrad; ctx.fillRect(0,0,canvas.width,horizonY());
+    let grassGrad=ctx.createLinearGradient(0,horizonY(),0,canvas.height);
+    grassGrad.addColorStop(0,'#5fae4f'); grassGrad.addColorStop(1,'#2d7a2d');
+    ctx.fillStyle=grassGrad; ctx.fillRect(0,horizonY(),canvas.width,canvas.height-horizonY());
+    for (let i=0;i<10;i++){
+      const d0=i/10,d1=(i+1)/10;
+      ctx.fillStyle = i%2===0?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.03)';
+      const y0=projY(d0), y1=projY(d1);
+      ctx.fillRect(0,y1,canvas.width,y0-y1);
+    }
+  }
+
+  function drawHole(){
+    const x=projX(hole.xFrac,hole.depthFrac), y=projY(hole.depthFrac), s=scaleAt(hole.depthFrac);
+    ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(1,2*s);
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y-60*s); ctx.stroke();
+    ctx.fillStyle='#e63946';
+    ctx.beginPath(); ctx.moveTo(x,y-60*s); ctx.lineTo(x+22*s,y-52*s); ctx.lineTo(x,y-44*s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#0a0a0a';
+    ctx.beginPath(); ctx.ellipse(x,y,hole.radius*s,hole.radius*s*0.45,0,0,Math.PI*2); ctx.fill();
+  }
+
+  function drawTee(){
+    if (window.__ballFlying) return;
+    const x=canvas.width/2,y=groundY();
+    ctx.fillStyle='rgba(255,255,255,0.6)';
+    ctx.beginPath(); ctx.ellipse(x,y+10,16,5,0,0,Math.PI*2); ctx.fill();
+  }
+
+  function drawBall(){
+    let x,y,s;
+    if (ball.z>0 || window.__ballFlying){
+      x=projX(0.5+ball.lateral*ball.z*0.5, ball.z);
+      y=projY(ball.z) - Math.sin(Math.min(1,ball.z)*Math.PI)*70*(1-ball.z*0.4);
+      s=scaleAt(ball.z);
+    } else { x=canvas.width/2; y=groundY(); s=1; }
+    trail.push({x,y}); if (trail.length>18) trail.shift();
+    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=2;
+    ctx.beginPath(); trail.forEach((p,i)=>{i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x,y,Math.max(3,9*s),0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#ccc'; ctx.lineWidth=1; ctx.stroke();
+  }
+
+  let lastT=performance.now();
+  function loop(t){
+    const dt=Math.min(40,t-lastT); lastT=t;
+    drawField(); drawHole(); drawTee();
+    if (window.__ballFlying){
+      ball.z += (ball.speedNorm * dt)/1000 * 1.3;
+      if (ball.z>=1) ball.z=1;
+      drawBall();
+      if (ball.z>=0.999 && !ball.resolved){
+        ball.resolved = true;
+        const reach = Math.abs(ball.power - hole.requiredAngleNorm) < hole.tolerance && ball.speedNorm > 0.3;
+        const onTarget = reach;
+        setTimeout(()=>endShot(onTarget), 80);
+      }
+    } else { drawBall(); }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  setInterval(commitHistory, 5000);
+  window.addEventListener('beforeunload', commitHistory);
+})();
+</script>
+</body>
+</html>

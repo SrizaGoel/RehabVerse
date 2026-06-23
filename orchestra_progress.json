@@ -1,0 +1,16 @@
+{
+  "days": [
+    {
+      "date": "2026-06-23",
+      "max_angle": 149,
+      "max_hold": 28.0,
+      "week": 1
+    }
+  ],
+  "hold_target": 3.0,
+  "rom_penalty_days": 0,
+  "rom_penalty_offset": 0,
+  "trend": "STEADY",
+  "all_time_best_angle": 149,
+  "all_time_best_hold": 28.0
+}
