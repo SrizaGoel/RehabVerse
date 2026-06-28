@@ -142,7 +142,6 @@ let calibrated = false;
 let calib = { downAngle: null, upAngle: null };
 let calibPhase = 0; // 0 = waiting for arm-down sample, 1 = waiting for arm-up sample, 2 = done
 
-// ---------- Camera + Model setup ----------
 async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({ video: { width:320, height:240 }, audio:false });
   video.srcObject = stream;

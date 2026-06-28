@@ -1,0 +1,22 @@
+{
+  "days": [
+    {
+      "date": "2026-06-27",
+      "week": 0,
+      "time": 53.88,
+      "max_deviation": 25.0,
+      "hits": 0
+    }
+  ],
+  "unlocked_weeks": [
+    0,
+    1
+  ],
+  "all_time_best": {
+    "0": 53.88
+  },
+  "total_completions": 1,
+  "max_deviation_achieved": {
+    "0": 25.0
+  }
+}
