@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RehabVerse Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <div class="logo">RehabVerse</div>
+        <ul class="nav-links">
+            <li><a href="#" class="active">Surgery</a></li>
+            <li><a href="#">Progress</a></li>
+            <li><a href="#">Profile</a></li>
+        </ul>
+        <div class="profile">SG</div>
+    </nav>
+
+    <main class="dashboard">
+        <section class="hero-card">
+
+            <div class="recovery-header">
+                <div class="status-left">
+                    <span class="live-dot"></span>
+                    <div>
+                        <h3>Recovery Status</h3>
+                        <p>ACL Reconstruction, Meniscus Repair</p>
+                    </div>
+                </div>
+                <span class="status-pill">On Track</span>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="today-header">
+                <h2>Today's Sessions</h2>
+                <p>Complete both sessions to stay on track.</p>
+            </div>
+
+            <div class="surgery">
+                <p class="surgery-number">Surgery A</p>
+                <div class="session-grid">
+                    <div class="session-card">
+                        <div class="session-top">
+                            <div>
+                                <h3><i class="fa-solid fa-sun"></i> Morning</h3>
+                                <span><i class="fa-regular fa-clock"></i> 04:00 AM – 12:00 PM</span>
+                            </div>
+                            <span class="badge available">Available</span>
+                        </div>
+                        <div class="progress-info">2 / 3 Exercises</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill morning-fill"></div>
+                        </div>
+                        <button class="primary-btn">Continue Session</button>
+                    </div>
+                    <div class="session-card locked-card">
+                        <div class="session-top">
+                            <div>
+                                <h3><i class="fa-solid fa-moon"></i> Evening</h3>
+                                <span><i class="fa-regular fa-clock"></i> 04:00 PM – 08:00 PM</span>
+                            </div>
+                            <span class="badge locked">5h 26m</span>
+                        </div>
+                        <div class="progress-info">0 / 3 Exercises</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill evening-fill"></div>
+                        </div>
+                        <button class="secondary-btn" disabled>Locked</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="surgery">
+                <p class="surgery-number">Surgery B</p>
+                <div class="session-grid">
+                    <div class="session-card">
+                        <div class="session-top">
+                            <div>
+                                <h3><i class="fa-solid fa-sun"></i> Morning</h3>
+                                <span><i class="fa-regular fa-clock"></i> 04:00 AM – 12:00 PM</span>
+                            </div>
+                            <span class="badge available">Available</span>
+                        </div>
+                        <div class="progress-info">2 / 3 Exercises</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill morning-fill"></div>
+                        </div>
+                        <button class="primary-btn">Continue Session</button>
+                    </div>
+                    <div class="session-card locked-card">
+                        <div class="session-top">
+                            <div>
+                                <h3><i class="fa-solid fa-moon"></i> Evening</h3>
+                                <span><i class="fa-regular fa-clock"></i> 04:00 PM – 08:00 PM</span>
+                            </div>
+                            <span class="badge locked">5h 26m</span>
+                        </div>
+                        <div class="progress-info">0 / 3 Exercises</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill evening-fill"></div>
+                        </div>
+                        <button class="secondary-btn" disabled>Locked</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="daily-progress">
+                <div>
+                    <h3>Daily Progress</h3>
+                    <p>2 / 6 Exercises Completed</p>
+                </div>
+                <div class="daily-right">
+                    <span>33%</span>
+                    <div class="daily-progress-bar">
+                        <div class="daily-fill"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <button class="hero-card-past">
+            View Past Sessions              ->
+        </button>
+    </main>
+</body>
+
+</html>
