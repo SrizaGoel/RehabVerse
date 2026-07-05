@@ -1,0 +1,465 @@
+<div class="exercise-window">
+
+    <aside class="sidebar">
+
+        <div class="exercise-title">
+            Side Arm Raise
+        </div>
+
+        <button class="tab active" onclick="showTab(event,'goal')">
+            Goal
+        </button>
+
+        <button class="tab" onclick="showTab(event,'instructions')">
+            Instructions
+        </button>
+
+        <button class="tab" onclick="showTab(event,'metrics')">
+            Metrics Tracked
+        </button>
+
+        <button class="tab" onclick="showTab(event,'tips')">
+            Success Tips
+        </button>
+
+        <button class="tab start-tab" onclick="showTab(event,'start')">
+            Start Session
+        </button>
+
+    </aside>
+
+
+    <main class="content">
+
+        <!-- GOAL -->
+
+        <section id="goal" class="tab-content active">
+
+            <h2>Exercise Goal</h2>
+
+            <div class="goal-layout">
+
+                <div class="goal-image">
+
+                    <!-- Replace with your stockman image -->
+
+                    <img src="images/side-arm-raise.png">
+
+                </div>
+
+                <div class="goal-info">
+
+                    <h3>Objective</h3>
+
+                    <p>
+                        Improve shoulder abduction through controlled movement while maintaining
+                        correct posture throughout the exercise.
+                    </p>
+
+                    <div class="info-card">
+
+                        <strong>Primary Muscle</strong>
+
+                        <p>Middle Deltoid</p>
+
+                    </div>
+
+                    <div class="info-card">
+
+                        <strong>Movement</strong>
+
+                        <p>Shoulder Abduction</p>
+
+                    </div>
+
+                    <div class="info-card">
+
+                        <strong>Target</strong>
+
+                        <p>Reach the rehabilitation target ROM safely.</p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- INSTRUCTIONS -->
+
+        <section id="instructions" class="tab-content">
+
+            <h2>Instructions</h2>
+
+            <ol>
+
+                <li>Stand upright facing the camera.</li>
+
+                <li>Keep your feet shoulder-width apart.</li>
+
+                <li>Raise your surgery arm sideways.</li>
+
+                <li>Reach the highlighted target angle.</li>
+
+                <li>Hold the position until instructed.</li>
+
+                <li>Lower the arm slowly.</li>
+
+                <li>Repeat until all repetitions are completed.</li>
+
+            </ol>
+
+            <div class="note">
+
+                Progress depends on completing rehabilitation goals rather than calendar weeks.
+
+            </div>
+
+        </section>
+
+
+
+        <!-- METRICS -->
+
+        <section id="metrics" class="tab-content">
+
+            <h2>Metrics Tracked</h2>
+
+            <table>
+
+                <tr>
+
+                    <th>Metric</th>
+
+                    <th>Description</th>
+
+                </tr>
+
+                <tr>
+
+                    <td>Range of Motion</td>
+
+                    <td>Highest shoulder angle achieved.</td>
+
+                </tr>
+
+                <tr>
+
+                    <td>Target Angle</td>
+
+                    <td>Required ROM for current stage.</td>
+
+                </tr>
+
+                <tr>
+
+                    <td>Hold Time</td>
+
+                    <td>Successful hold duration.</td>
+
+                </tr>
+
+                <tr>
+
+                    <td>Repetitions</td>
+
+                    <td>Total successful repetitions.</td>
+
+                </tr>
+
+                <tr>
+
+                    <td>Session Progress</td>
+
+                    <td>Overall completion percentage.</td>
+
+                </tr>
+
+                <tr>
+
+                    <td>Recovery Trend</td>
+
+                    <td>Improvement over previous sessions.</td>
+
+                </tr>
+
+            </table>
+
+        </section>
+
+
+
+        <!-- SUCCESS -->
+
+        <section id="tips" class="tab-content">
+
+            <h2>Success Tips</h2>
+
+            <ul>
+
+                <li>Remain standing throughout the exercise.</li>
+
+                <li>Keep your full upper body visible.</li>
+
+                <li>Move slowly and avoid momentum.</li>
+
+                <li>Do not shrug your shoulders.</li>
+
+                <li>Maintain an upright posture.</li>
+
+                <li>Breathe normally.</li>
+
+                <li>Stop immediately if sharp pain occurs.</li>
+
+            </ul>
+
+        </section>
+
+
+
+        <!-- START -->
+
+        <section id="start" class="tab-content">
+
+            <div class="start-screen">
+
+                <h2>Ready?</h2>
+
+                <p>
+
+                    Ensure your camera is positioned correctly and there is enough room
+                    to perform the movement safely.
+
+                </p>
+
+                <button class="start-button">
+
+                    Start Session
+
+                </button>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+<style>
+    .exercise-window{
+
+    display:flex;
+    height:100%;
+
+}
+
+.sidebar{
+
+    width:250px;
+    padding:25px;
+    border-right:1px solid #e7e7e7;
+
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+
+    background:#F7F3EC;
+
+}
+
+.exercise-title{
+
+    font-size:24px;
+    font-weight:700;
+
+    margin-bottom:20px;
+
+}
+
+.tab{
+
+    background:none;
+    border:none;
+
+    text-align:left;
+
+    padding:14px 18px;
+
+    border-radius:12px;
+
+    cursor:pointer;
+
+    font-size:17px;
+
+    transition:.2s;
+
+    color:#3B3B3B;
+
+}
+
+.tab:hover{
+
+    background:#E9E1D3;
+
+}
+
+.tab.active{
+
+    background:#CBB89D;
+
+    color:#222;
+
+    font-weight:600;
+
+}
+
+.start-tab{
+
+    margin-top:auto;
+
+}
+
+.content{
+
+    flex:1;
+
+    padding:40px;
+
+    overflow-y:auto;
+
+}
+
+.tab-content{
+
+    display:none;
+
+}
+
+.tab-content.active{
+
+    display:block;
+
+}
+
+.goal-layout{
+
+    display:grid;
+
+    grid-template-columns:420px 1fr;
+
+    gap:40px;
+
+    margin-top:30px;
+
+}
+
+.goal-image{
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+}
+
+.goal-image img{
+
+    width:100%;
+    max-width:380px;
+
+}
+
+.goal-info{
+
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+
+}
+
+.info-card{
+
+    background:#F8F8F8;
+
+    border-radius:12px;
+
+    padding:18px;
+
+}
+
+.note{
+
+    margin-top:30px;
+
+    padding:18px;
+
+    background:#F4F4F4;
+
+    border-radius:10px;
+
+}
+
+table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+    margin-top:20px;
+
+}
+
+th{
+
+    background:#EFE7DA;
+
+    text-align:left;
+
+    padding:14px;
+
+}
+
+td{
+
+    padding:14px;
+
+    border-bottom:1px solid #ECECEC;
+
+}
+
+.start-screen{
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    align-items:center;
+
+    height:100%;
+
+    text-align:center;
+
+}
+
+.start-button{
+
+    margin-top:25px;
+
+    padding:15px 40px;
+
+    border:none;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+    font-size:18px;
+
+    background:#CBB89D;
+
+}
+</style>

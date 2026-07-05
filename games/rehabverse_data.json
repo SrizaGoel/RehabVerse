@@ -1,19 +1,96 @@
 {
+  "surgery_arm": "R",
   "week": 1,
-  "hold_target": 3,
-  "trend": "STEADY",
+  "next_day": 4,
+  "next_slot": "AM",
+  "trend": "ADJUSTING DOWN",
+  "last_session_date": "2026-07-05",
   "days": [
     {
-      "date": "2026-06-23",
-      "arm": "L",
-      "rom": 69,
-      "hold": 3.5105631351470947
+      "date": "2026-07-05",
+      "arm": "R",
+      "week": 1,
+      "day": 1,
+      "slot": "AM",
+      "rom": 0,
+      "hold": 0.0,
+      "reps": 0,
+      "target_rom": 30,
+      "target_hold": 11.4,
+      "target_reps": 5,
+      "met": false
     },
     {
-      "date": "2026-06-23",
+      "date": "2026-07-05",
       "arm": "R",
-      "rom": 42,
-      "hold": 0.0
+      "week": 1,
+      "day": 1,
+      "slot": "PM",
+      "rom": 0,
+      "hold": 0.0,
+      "reps": 0,
+      "target_rom": 30,
+      "target_hold": 11.4,
+      "target_reps": 6,
+      "met": false
+    },
+    {
+      "date": "2026-07-05",
+      "arm": "R",
+      "week": 1,
+      "day": 2,
+      "slot": "AM",
+      "rom": 109,
+      "hold": 27.6,
+      "reps": 1,
+      "target_rom": 30,
+      "target_hold": 12.9,
+      "target_reps": 6,
+      "met": false
+    },
+    {
+      "date": "2026-07-05",
+      "arm": "R",
+      "week": 1,
+      "day": 2,
+      "slot": "PM",
+      "rom": 115,
+      "hold": 14.5,
+      "reps": 3,
+      "target_rom": 30,
+      "target_hold": 12.9,
+      "target_reps": 6,
+      "met": false
+    },
+    {
+      "date": "2026-07-05",
+      "arm": "R",
+      "week": 1,
+      "day": 3,
+      "slot": "AM",
+      "rom": 41,
+      "hold": 2.1,
+      "reps": 4,
+      "target_rom": 30,
+      "target_hold": 14.3,
+      "target_reps": 6,
+      "met": false
+    },
+    {
+      "date": "2026-07-05",
+      "arm": "R",
+      "week": 1,
+      "day": 3,
+      "slot": "PM",
+      "rom": 35,
+      "hold": 15.9,
+      "reps": 3,
+      "target_rom": 30,
+      "target_hold": 14.3,
+      "target_reps": 7,
+      "met": false
     }
-  ]
+  ],
+  "perf_penalty_hold": 0.0,
+  "perf_penalty_reps": 2.0
 }

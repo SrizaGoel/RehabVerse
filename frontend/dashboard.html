@@ -311,9 +311,20 @@
             </div>
 
         </section>
+        <button onclick="openPopup('./popups/side_arm_raise.html')">
+            Exercise
+        </button>
+        <div id="popup" class="popup">
+            <div class="popup-box">
+                <span class="close" onclick="closePopup()">
+                    &times;
+                </span>
+                <div id="popup-content">
+                </div>
+            </div>
+        </div>
     </main>
     <script src="dashboard.js"></script>
     <script src="human_body/body.js"></script>
 </body>
-
 </html>

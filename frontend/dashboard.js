@@ -103,7 +103,6 @@ function lockEvening(card, badge, button, now)
     card.classList.add("locked-card");
 }
 
-
 function updateXP(xp=1000){
     let league;
     if (xp>=0 && xp<=200)
@@ -135,3 +134,12 @@ function updateLeagueImage() {
 updateSessions();
 updateLeagueImage();
 setInterval(updateSessions, 60000);
+async function openPopup(file){
+    const response = await fetch(file);
+    const html = await response.text();
+    document.getElementById("popup-content").innerHTML = html;
+    document.getElementById("popup").style.display="flex";
+}
+function closePopup(){
+    document.getElementById("popup").style.display="none";
+}

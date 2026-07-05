@@ -1,0 +1,35 @@
+{
+  "week": 1,
+  "hold_target": 4,
+  "trend": "DROP",
+  "days": [
+    {
+      "date": "2026-06-23",
+      "arm": "L",
+      "rom": 69,
+      "hold": 3.5105631351470947
+    },
+    {
+      "date": "2026-06-23",
+      "arm": "R",
+      "rom": 42,
+      "hold": 0.0
+    },
+    {
+      "date": "2026-07-05",
+      "arm": "L",
+      "rom": 173,
+      "hold": 7.164252996444702
+    },
+    {
+      "date": "2026-07-05",
+      "arm": "R",
+      "rom": 38,
+      "hold": 0.0
+    }
+  ],
+  "surgery_arm": "L",
+  "next_day": 1,
+  "next_slot": "AM",
+  "last_session_date": null
+}
