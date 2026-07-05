@@ -102,5 +102,36 @@ function lockEvening(card, badge, button, now)
     button.classList.add("secondary-btn");
     card.classList.add("locked-card");
 }
+
+
+function updateXP(xp=1000){
+    let league;
+    if (xp>=0 && xp<=200)
+        league=1;
+    else if(xp<=745)
+        league=2;
+    else if(xp<=1499)
+        league=3;
+    else if(xp<=2499)
+        league=4;
+    else if(xp<=3999)
+        league=5;
+    else if(xp<=5999)
+        league=6;
+    else if(xp<=7999)
+        league=7;
+    else if(xp<=9999)
+        league=8;
+    else if(xp<=14999)
+        league=9;
+    else 
+        league=10;
+    return league;
+}
+function updateLeagueImage() {
+    const leagueImg = document.getElementById("leagueImg");
+    leagueImg.src = `assets/league${updateXP()}.png`;
+}
 updateSessions();
+updateLeagueImage();
 setInterval(updateSessions, 60000);
