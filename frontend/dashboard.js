@@ -143,3 +143,17 @@ async function openPopup(file){
 function closePopup(){
     document.getElementById("popup").style.display="none";
 }
+window.showTab = function(evt, tabId) {
+
+    document.querySelectorAll("#popup-content .tab-content").forEach(section => {
+        section.classList.remove("active");
+    });
+
+    document.querySelectorAll("#popup-content .tab").forEach(btn => {
+        btn.classList.remove("active");
+    });
+
+    document.querySelector("#popup-content #" + tabId).classList.add("active");
+
+    evt.currentTarget.classList.add("active");
+};
