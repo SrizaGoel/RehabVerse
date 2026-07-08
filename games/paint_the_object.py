@@ -1,17 +1,20 @@
 """
 RehabVerse — Paint the Sky
 ===========================
-Weekly mobility check: paint a picture by raising your arm.
-Arm angle controls brush Y position. Hold still to paint.
+Mobility check: paint a picture by raising your arm out to the side.
+Arm position controls brush Y position. Hold still to paint.
 
-UNLOCK REQUIREMENTS (tracked in local file rehab_progress.json):
-  - Front raise hold: 60s cumulative at >= 90 deg
-  - Side raise hold:  60s cumulative at >= 90 deg (toggle with TAB)
+UNLOCK REQUIREMENT (tracked in local file rehab_progress.json):
+  - Side raise hold: 60s cumulative at >= 90 deg
 
-Once both are met, the weekly paint challenge unlocks.
+Once met, the paint challenge unlocks.
+
+Each template remembers your best time and your last time — seconds from
+unlock to finishing the picture — like a personal speedrun timer. No
+session/week tracking, just one small per-template record updated on
+completion.
 
 Controls:
-  TAB  - toggle front / side raise mode
   Q    - quit
 
 Install:
@@ -27,21 +30,23 @@ import json
 import os
 import random
 
-mp_pose    = None   
+mp_pose    = None
 mp_drawing = None
 
 W, H = 1280, 720
 
 PROGRESS_FILE = "rehab_progress.json"
-REQUIRED_HOLD = 60.0   
+REQUIRED_HOLD = 60.0
 
 
 def load_progress():
     if os.path.exists(PROGRESS_FILE):
         with open(PROGRESS_FILE) as f:
-            return json.load(f)
-    return {"front_hold": 0.0, "side_hold": 0.0,
-            "week": _week_key(), "paint_done": False}
+            data = json.load(f)
+        data.setdefault("side_hold", 0.0)
+        data.setdefault("paint_records", {})
+        return data
+    return {"side_hold": 0.0, "paint_records": {}}
 
 
 def save_progress(data):
@@ -49,18 +54,28 @@ def save_progress(data):
         json.dump(data, f, indent=2)
 
 
-def _week_key():
-    import datetime
-    today = datetime.date.today()
-    return f"{today.year}-W{today.isocalendar()[1]:02d}"
+def get_paint_record(progress, template_name):
+    return progress["paint_records"].get(
+        template_name, {"best_time": None, "last_time": None, "times_painted": 0}
+    )
 
 
-def check_new_week(data):
-    wk = _week_key()
-    if data.get("week") != wk:
-        data["week"]       = wk
-        data["paint_done"] = False   
-    return data
+def record_paint_time(progress, template_name, elapsed):
+    """Update the per-template best/last time record and persist it.
+    Returns (prev_best, prev_last) — the values that were in place
+    *before* this completion, so the caller can show a comparison.
+    """
+    rec = get_paint_record(progress, template_name)
+    prev_best = rec["best_time"]
+    prev_last = rec["last_time"]
+    new_best  = elapsed if prev_best is None else min(prev_best, elapsed)
+    progress["paint_records"][template_name] = {
+        "best_time": new_best,
+        "last_time": elapsed,
+        "times_painted": rec["times_painted"] + 1,
+    }
+    save_progress(progress)
+    return prev_best, prev_last
 
 
 TEMPLATES = ["sun", "flower", "butterfly"]
@@ -155,11 +170,11 @@ class PaintCanvas:
     def __init__(self, template_name):
         self.name        = template_name
         self.outline, self.zones = make_template_mask(template_name, self.PAINT_W, self.PAINT_H)
-        self.canvas      = self.outline.copy()  
+        self.canvas      = self.outline.copy()
         self.filled      = np.zeros((self.PAINT_H, self.PAINT_W), dtype=np.uint8)  # painted pixels
         self.brush_x     = self.PAINT_W // 2
         self.brush_y     = self.PAINT_H // 2
-        self.brush_r     = 22   
+        self.brush_r     = 22
         self.paint_color = (0, 180, 255)
         self.total_paintable = 0
         self.total_painted   = 0
@@ -247,27 +262,20 @@ def calc_angle(a, b, c):
     return 360 - angle if angle > 180 else angle
 
 
-def get_arm_angle(landmarks, mode="front"):
+def get_arm_angle(landmarks):
     """
-    front: shoulder FLEXION - arm raised forward.
-           hip->shoulder->elbow angle. Good for front raise.
-    side:  shoulder ABDUCTION - arm raised out to the side.
-           right_shoulder->left_shoulder->left_elbow angle.
-           Lifting left arm laterally produces a growing angle.
-    Both ~0 at rest, growing toward ~180 at full raise. Uses LEFT arm.
+    Shoulder ABDUCTION - arm raised out to the side.
+    right_shoulder->left_shoulder->left_elbow angle.
+    ~0 at rest, growing toward ~180 at full raise. Uses LEFT arm.
     """
     lm   = landmarks
     Pose = mp.solutions.pose.PoseLandmark
 
     l_shoulder = [lm[Pose.LEFT_SHOULDER.value].x,  lm[Pose.LEFT_SHOULDER.value].y]
     l_elbow    = [lm[Pose.LEFT_ELBOW.value].x,     lm[Pose.LEFT_ELBOW.value].y]
+    r_shoulder = [lm[Pose.RIGHT_SHOULDER.value].x, lm[Pose.RIGHT_SHOULDER.value].y]
 
-    if mode == "front":
-        hip = [lm[Pose.LEFT_HIP.value].x, lm[Pose.LEFT_HIP.value].y]
-        return calc_angle(hip, l_shoulder, l_elbow)
-    else:
-        r_shoulder = [lm[Pose.RIGHT_SHOULDER.value].x, lm[Pose.RIGHT_SHOULDER.value].y]
-        return calc_angle(r_shoulder, l_shoulder, l_elbow)
+    return calc_angle(r_shoulder, l_shoulder, l_elbow)
 
 
 def get_wrist_normalized(landmarks):
@@ -284,81 +292,98 @@ def get_wrist_normalized(landmarks):
     return raw_x, flipped_y
 
 
-def draw_lock_screen(frame, progress):
+def draw_lock_screen(frame, progress, template_name):
     overlay = frame.copy()
     cv2.rectangle(overlay, (0,0), (W,H), (5,5,15), -1)
     cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
 
-    cv2.putText(frame, "WEEKLY PAINT CHALLENGE", (W//2-230, 80),
+    cv2.putText(frame, "PAINT CHALLENGE", (W//2-190, 80),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (180,140,255), 2)
     cv2.putText(frame, "LOCKED", (W//2-70, 130),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.1, (80,80,200), 2)
 
-    cv2.putText(frame, "Complete these mobility milestones to unlock:", (W//2-270, 190),
+    cv2.putText(frame, "Complete this mobility milestone to unlock:", (W//2-270, 190),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160,160,180), 1)
 
-    fh  = min(progress["front_hold"], REQUIRED_HOLD)
-    pct = fh / REQUIRED_HOLD
+    sh   = min(progress["side_hold"], REQUIRED_HOLD)
+    pct  = sh / REQUIRED_HOLD
     done = pct >= 1.0
-    label = "Front raise: hold 90+ deg for 60 sec"
-    col   = (80,220,80) if done else (100,160,255)
+    label = "Side raise: hold 90+ deg for 60 sec"
+    col   = (80,220,80) if done else (100,200,255)
     cv2.putText(frame, label, (W//2-270, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.5, col, 1)
     cv2.rectangle(frame, (W//2-270, 250), (W//2+130, 265), (40,40,60), -1)
     cv2.rectangle(frame, (W//2-270, 250), (W//2-270+int(400*pct), 265), col, -1)
-    cv2.putText(frame, f"{fh:.0f}s / 60s", (W//2+140, 263), cv2.FONT_HERSHEY_SIMPLEX, 0.42, col, 1)
+    cv2.putText(frame, f"{sh:.0f}s / 60s", (W//2+140, 263), cv2.FONT_HERSHEY_SIMPLEX, 0.42, col, 1)
 
-    sh   = min(progress["side_hold"], REQUIRED_HOLD)
-    pct2 = sh / REQUIRED_HOLD
-    done2 = pct2 >= 1.0
-    label2 = "Side raise: hold 90+ deg for 60 sec"
-    col2   = (80,220,80) if done2 else (100,200,255)
-    cv2.putText(frame, label2, (W//2-270, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.5, col2, 1)
-    cv2.rectangle(frame, (W//2-270, 320), (W//2+130, 335), (40,40,60), -1)
-    cv2.rectangle(frame, (W//2-270, 320), (W//2-270+int(400*pct2), 335), col2, -1)
-    cv2.putText(frame, f"{sh:.0f}s / 60s", (W//2+140, 333), cv2.FONT_HERSHEY_SIMPLEX, 0.42, col2, 1)
+    # "Your last time" preview for the template that's queued up next
+    rec = get_paint_record(progress, template_name)
+    if rec["times_painted"] == 0:
+        preview = "First time painting this one!"
+    else:
+        preview = (f"Last time you painted this: {rec['last_time']:.1f}s "
+                   f"(best: {rec['best_time']:.1f}s)")
+    cv2.putText(frame, preview, (W//2-270, 305), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200,190,255), 1)
 
-    cv2.putText(frame, "TAB = toggle front/side mode    Q = quit",
-                (W//2-220, H-30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100,100,120), 1)
+    cv2.putText(frame, "Q = quit",
+                (W//2-40, H-30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100,100,120), 1)
 
 
-def draw_paint_hud(frame, canvas: PaintCanvas, mode, angle, is_holding, progress):
+def draw_paint_hud(frame, canvas: PaintCanvas, angle, is_holding, progress, completion_info):
     panel = frame.copy()
-    cv2.rectangle(panel, (10,10), (340,220), (8,8,18), -1)
+    cv2.rectangle(panel, (10,10), (340,200), (8,8,18), -1)
     cv2.addWeighted(panel, 0.75, frame, 0.25, 0, frame)
-    cv2.rectangle(frame, (10,10), (340,220), (80,60,100), 1)
+    cv2.rectangle(frame, (10,10), (340,200), (80,60,100), 1)
 
     cv2.putText(frame, "PAINT THE SKY", (20,38), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180,140,255), 1)
 
-    mode_str = "FRONT RAISE" if mode=="front" else "SIDE RAISE"
-    mode_col = (100,200,255) if mode=="front" else (100,255,200)
-    cv2.putText(frame, f"Mode: {mode_str}", (20,60), cv2.FONT_HERSHEY_SIMPLEX, 0.45, mode_col, 1)
-
-    cv2.putText(frame, f"Arm angle: {int(angle)} deg", (20,82), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180,170,200), 1)
-    cv2.rectangle(frame, (20,88), (220,98), (35,30,50), -1)
+    cv2.putText(frame, f"Arm angle: {int(angle)} deg", (20,62), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180,170,200), 1)
+    cv2.rectangle(frame, (20,68), (220,78), (35,30,50), -1)
     fill = int(200 * min(angle,180) / 180)
-    cv2.rectangle(frame, (20,88), (20+fill,98), (60,220,120) if angle>90 else (80,130,255), -1)
+    cv2.rectangle(frame, (20,68), (20+fill,78), (60,220,120) if angle>90 else (80,130,255), -1)
 
     comp = canvas.completion_pct()
-    cv2.putText(frame, f"Painted: {comp:.0f}%", (20,120), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180,170,200), 1)
-    cv2.rectangle(frame, (20,126), (220,136), (35,30,50), -1)
-    cv2.rectangle(frame, (20,126), (20+int(200*comp/100),136), (180,100,220), -1)
+    cv2.putText(frame, f"Painted: {comp:.0f}%", (20,100), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180,170,200), 1)
+    cv2.rectangle(frame, (20,106), (220,116), (35,30,50), -1)
+    cv2.rectangle(frame, (20,106), (20+int(200*comp/100),116), (180,100,220), -1)
 
     acc = canvas.accuracy
     acc_col = (80,220,80) if acc>85 else (60,160,255) if acc>60 else (60,60,220)
-    cv2.putText(frame, f"Accuracy: {acc:.0f}%", (20,158), cv2.FONT_HERSHEY_SIMPLEX, 0.42, acc_col, 1)
+    cv2.putText(frame, f"Accuracy: {acc:.0f}%", (20,138), cv2.FONT_HERSHEY_SIMPLEX, 0.42, acc_col, 1)
 
     hold_col = (80,220,80) if is_holding else (80,80,100)
     cv2.putText(frame, "PAINTING" if is_holding else "Hold still to paint",
-                (20,178), cv2.FONT_HERSHEY_SIMPLEX, 0.42, hold_col, 1)
+                (20,158), cv2.FONT_HERSHEY_SIMPLEX, 0.42, hold_col, 1)
 
-    fh = min(progress["front_hold"], REQUIRED_HOLD)
-    sh = min(progress["side_hold"],  REQUIRED_HOLD)
-    cv2.putText(frame, f"Front hold: {fh:.0f}s/60s   Side hold: {sh:.0f}s/60s",
-                (20,200), cv2.FONT_HERSHEY_SIMPLEX, 0.36, (120,110,140), 1)
+    sh = min(progress["side_hold"], REQUIRED_HOLD)
+    cv2.putText(frame, f"Side hold: {sh:.0f}s/60s",
+                (20,180), cv2.FONT_HERSHEY_SIMPLEX, 0.36, (120,110,140), 1)
 
-    if canvas.complete:
-        cv2.putText(frame, "Painting complete! Well done!", (W//2-200, H-30),
+    if canvas.complete and completion_info is not None:
+        elapsed, prev_best, prev_last = completion_info
+        rec = get_paint_record(progress, canvas.name)
+
+        cv2.putText(frame, "Painting complete!", (W//2-160, H-140),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (80,255,150), 2)
+        cv2.putText(frame, f"Time: {elapsed:.1f}s", (W//2-160, H-108),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (230,230,240), 1)
+        cv2.putText(frame, f"Your best on {canvas.name.title()}: {rec['best_time']:.1f}s",
+                    (W//2-160, H-80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200,190,255), 1)
+
+        if prev_last is not None:
+            diff = prev_last - elapsed
+            if diff > 0:
+                msg = f"Last time you painted {canvas.name.title()}: {prev_last:.1f}s -> you beat it by {diff:.1f}s!"
+                col = (80,220,80)
+            elif diff < 0:
+                msg = f"Last time you painted {canvas.name.title()}: {prev_last:.1f}s -> {abs(diff):.1f}s slower this time"
+                col = (100,160,255)
+            else:
+                msg = f"Last time you painted {canvas.name.title()}: {prev_last:.1f}s -> tied it!"
+                col = (200,190,255)
+            cv2.putText(frame, msg, (W//2-260, H-52), cv2.FONT_HERSHEY_SIMPLEX, 0.5, col, 1)
+        else:
+            cv2.putText(frame, "First time painting this one!", (W//2-160, H-52),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200,190,255), 1)
     elif comp > 50:
         cv2.putText(frame, "Great work — keep filling it in!", (W//2-200, H-30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, (180,220,100), 2)
@@ -366,7 +391,7 @@ def draw_paint_hud(frame, canvas: PaintCanvas, mode, angle, is_holding, progress
         cv2.putText(frame, "Raise arm to move brush — hold still to paint", (W//2-260, H-30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.58, (100,160,255), 1)
 
-    cv2.putText(frame, "TAB=toggle mode   Q=quit", (W-280, H-15),
+    cv2.putText(frame, "Q=quit", (W-100, H-15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.38, (70,65,85), 1)
 
 
@@ -377,15 +402,12 @@ def main():
     mp_drawing = mp.solutions.drawing_utils
 
     print("RehabVerse — Paint the Sky")
-    print("TAB to toggle front/side raise mode.  Q to quit.")
+    print("Q to quit.")
 
     progress = load_progress()
-    progress = check_new_week(progress)
-    save_progress(progress)
 
     def is_unlocked():
-        return (progress["front_hold"] >= REQUIRED_HOLD and
-                progress["side_hold"]  >= REQUIRED_HOLD)
+        return progress["side_hold"] >= REQUIRED_HOLD
 
     template_name = random.choice(TEMPLATES)
     paint_canvas  = PaintCanvas(template_name)
@@ -394,18 +416,19 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  W)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, H)
 
-    mode           = "front"    
     smoothed_angle = 0.0
-    hold_start     = None
     is_holding     = False
-    HOLD_THRESHOLD = 85         
-    prev_angle     = 0.0
+    HOLD_THRESHOLD = 85
     prev_time      = time.time()
 
     smooth_wrist_x = 0.5
     smooth_wrist_y = 0.5
 
     milestone_hold_start = None
+
+    paint_start_time  = None   # set the moment the challenge unlocks
+    completion_recorded = False
+    completion_info      = None   # (elapsed, prev_best, prev_last)
 
     with mp_pose.Pose(min_detection_confidence=0.6,
                       min_tracking_confidence=0.6) as pose:
@@ -425,7 +448,7 @@ def main():
 
             if results.pose_landmarks:
                 lm         = results.pose_landmarks.landmark
-                raw        = get_arm_angle(lm, mode)
+                raw        = get_arm_angle(lm)
                 smoothed_angle = 0.82 * smoothed_angle + 0.18 * raw
                 angle      = smoothed_angle
                 wrist_norm = get_wrist_normalized(lm)
@@ -435,23 +458,21 @@ def main():
                     mp_drawing.DrawingSpec(color=(80,70,100), thickness=1, circle_radius=2),
                     mp_drawing.DrawingSpec(color=(70,60,90),  thickness=1))
 
-            if angle >= HOLD_THRESHOLD:
-                if milestone_hold_start is None:
-                    milestone_hold_start = t
-                elapsed = t - milestone_hold_start
-                key = "front_hold" if mode == "front" else "side_hold"
-                progress[key] = min(REQUIRED_HOLD, progress.get(key, 0.0) + dt)
-                save_progress(progress)
-            else:
-                milestone_hold_start = None
+            if not is_unlocked():
+                if angle >= HOLD_THRESHOLD:
+                    if milestone_hold_start is None:
+                        milestone_hold_start = t
+                    progress["side_hold"] = min(REQUIRED_HOLD, progress.get("side_hold", 0.0) + dt)
+                    save_progress(progress)
+                else:
+                    milestone_hold_start = None
 
-            SMOOTH = 0.80   
+            SMOOTH = 0.80
             smooth_wrist_x = SMOOTH * smooth_wrist_x + (1-SMOOTH) * wrist_norm[0]
             smooth_wrist_y = SMOOTH * smooth_wrist_y + (1-SMOOTH) * wrist_norm[1]
 
-
-            X_LO, X_HI = 0.25, 0.75  
-            Y_LO, Y_HI = 0.10, 0.70   
+            X_LO, X_HI = 0.25, 0.75
+            Y_LO, Y_HI = 0.10, 0.70
             brush_x_norm = np.clip((smooth_wrist_x - X_LO) / (X_HI - X_LO), 0.0, 1.0)
             brush_y_norm = np.clip((smooth_wrist_y - Y_LO) / (Y_HI - Y_LO), 0.0, 1.0)
             brush_y_norm = 1.0 - brush_y_norm
@@ -459,10 +480,18 @@ def main():
             is_holding = (angle >= HOLD_THRESHOLD)
 
             if is_unlocked():
+                if paint_start_time is None:
+                    paint_start_time = t   # timer starts the moment it unlocks
+
                 paint_canvas.move_brush(brush_x_norm, brush_y_norm)
                 paint_canvas.paint_at_brush(is_holding)
 
-            prev_angle = angle
+                if paint_canvas.complete and not completion_recorded:
+                    elapsed = t - paint_start_time
+                    prev_best, prev_last = record_paint_time(progress, template_name, elapsed)
+                    completion_info = (elapsed, prev_best, prev_last)
+                    completion_recorded = True
+
             prev_time  = t
 
             bg = np.zeros((H, W, 3), dtype=np.uint8)
@@ -470,7 +499,7 @@ def main():
             cv2.addWeighted(bg, 0.5, frame, 0.5, 0, frame)
 
             if not is_unlocked():
-                draw_lock_screen(frame, progress)
+                draw_lock_screen(frame, progress, template_name)
             else:
                 cw, ch = PaintCanvas.PAINT_W, PaintCanvas.PAINT_H
                 px = (W - cw) // 2 + 120
@@ -483,34 +512,33 @@ def main():
                 cv2.putText(frame, paint_canvas.name.upper(),
                             (px, py-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (160,140,200), 1)
 
-                draw_paint_hud(frame, paint_canvas, mode, angle, is_holding, progress)
+                draw_paint_hud(frame, paint_canvas, angle, is_holding, progress, completion_info)
 
             cv2.imshow("RehabVerse — Paint the Sky", frame)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
-            elif key == 9:   # TAB
-                mode = "side" if mode == "front" else "front"
-                milestone_hold_start = None
-                print(f"Switched to {mode} raise mode")
 
     cap.release()
     cv2.destroyAllWindows()
     save_progress(progress)
 
     print("\nSession complete!")
-    print(f"  Front hold total: {progress['front_hold']:.0f}s / {REQUIRED_HOLD:.0f}s")
-    print(f"  Side hold total:  {progress['side_hold']:.0f}s / {REQUIRED_HOLD:.0f}s")
+    print(f"  Side hold total: {progress['side_hold']:.0f}s / {REQUIRED_HOLD:.0f}s")
     if is_unlocked():
         print(f"  Painting: {paint_canvas.completion_pct():.0f}% complete, {paint_canvas.accuracy:.0f}% accuracy")
+        if completion_info is not None:
+            elapsed, prev_best, prev_last = completion_info
+            rec = get_paint_record(progress, template_name)
+            print(f"  Time: {elapsed:.1f}s (best on {template_name}: {rec['best_time']:.1f}s)")
     else:
         print("  Paint challenge not yet unlocked.")
 
 
 def is_unlocked_check():
     p = load_progress()
-    return p.get("front_hold",0) >= REQUIRED_HOLD and p.get("side_hold",0) >= REQUIRED_HOLD
+    return p.get("side_hold", 0) >= REQUIRED_HOLD
 
 
 if __name__ == "__main__":
