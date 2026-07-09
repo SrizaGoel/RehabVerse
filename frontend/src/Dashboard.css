@@ -311,6 +311,11 @@ a {
     color: #B45309;
 }
 
+.completed {
+    background: #DBEAFE;
+    color: #1D4ED8;
+}
+
 .progress-info {
     font-weight: 700;
     font-size: .82rem;
