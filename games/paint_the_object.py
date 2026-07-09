@@ -1,5 +1,5 @@
 """
-RehabVerse — Paint the Sky
+RehabVerse — Paint the Object
 ===========================
 Mobility check: paint a picture by raising your arm out to the side.
 Arm position controls brush Y position. Hold still to paint.
@@ -334,7 +334,7 @@ def draw_paint_hud(frame, canvas: PaintCanvas, angle, is_holding, progress, comp
     cv2.addWeighted(panel, 0.75, frame, 0.25, 0, frame)
     cv2.rectangle(frame, (10,10), (340,200), (80,60,100), 1)
 
-    cv2.putText(frame, "PAINT THE SKY", (20,38), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180,140,255), 1)
+    cv2.putText(frame, "PAINT THE OBJECT", (20,38), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180,140,255), 1)
 
     cv2.putText(frame, f"Arm angle: {int(angle)} deg", (20,62), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180,170,200), 1)
     cv2.rectangle(frame, (20,68), (220,78), (35,30,50), -1)
@@ -401,7 +401,7 @@ def main():
     mp_pose    = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
 
-    print("RehabVerse — Paint the Sky")
+    print("RehabVerse — Paint the Object")
     print("Q to quit.")
 
     progress = load_progress()
@@ -514,7 +514,7 @@ def main():
 
                 draw_paint_hud(frame, paint_canvas, angle, is_holding, progress, completion_info)
 
-            cv2.imshow("RehabVerse — Paint the Sky", frame)
+            cv2.imshow("RehabVerse — Paint the Object", frame)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):

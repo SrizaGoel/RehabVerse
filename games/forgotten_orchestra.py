@@ -1,18 +1,33 @@
 """
-RehabVerse — The Forgotten Orchestra  (v3)
+RehabVerse — The Forgotten Orchestra  (v4)
 ==========================================
-Added in v3:
-  • Daily session log persisted to JSON
-  • If next day's max angle < previous day → daily ROM target drops for 2 days (recovery mode)
-  • If next day's max angle > previous day → hold target bumps up
-  • HUD shows: today's best, yesterday's best, current daily target, trend badge
-  • Best session all-time displayed
+This version implements the finalized "RehabVerse Final Rehabilitation Flow"
+spec on top of the v3 pose/audio/visual engine:
+
+  • Weekly ROM goal is FIXED for the whole week (no more penalty-day drops).
+  • Hold Time and Rep Target are the only adaptive parameters. They ramp
+    up day over day when the patient performs well, and step back down
+    on a missed/poor day. They never affect the ROM goal.
+  • Two independent sessions per day: Morning and Evening.
+  • Each session shows a live "Today's Objectives" checklist (ROM / Hold /
+    Reps / Restore Orchestra) and starts the orchestra at 0% every time.
+  • Day 7 is the official Weekly Assessment: both Morning and Evening
+    sessions are tested against the week's FINAL hold/rep targets (not
+    the daily adaptive ones). The week only clears if BOTH sessions meet
+    ROM + Hold + Reps. Otherwise -> "Week Extended" (never "Week Failed").
+  • A permanent "Kingdom Orchestra" tracks one restored instrument family
+    per completed week, independent of daily session resets.
+  • Daily Dashboard HUD shows week/day, targets, session status, today's
+    orchestra %, kingdom %, and streak.
 
 Install:
     pip install opencv-python mediapipe numpy pygame
 
 Run:
-    python forgotten_orchestra_v2.py
+    python forgotten_orchestra_v4.py
+
+Future : 
+    specify arm (l OR r) !IMPORTANT
 """
 
 import cv2
@@ -22,7 +37,7 @@ import time
 import random
 import json
 import os
-from datetime import date, timedelta
+from datetime import date, datetime
 
 import pygame
 import pygame.sndarray
@@ -34,216 +49,221 @@ import mediapipe as mp
 W, H        = 1280, 720
 SAMPLE_RATE = 44100
 CHUNK       = 1024
-DATA_FILE   = "orchestra_progress.json"
+DATA_FILE   = "rehabverse_progress.json"
+
+KINGDOM_NAMES = ["Strings", "Woodwinds", "Brass", "Choir", "Percussion", "Full Orchestra"]
 
 # ──────────────────────────────────────────────
-# PERSISTENCE — daily log + adaptive targets
+# REHAB WEEK DEFINITIONS
+#   max_angle          = FIXED weekly ROM goal (never changes mid-week)
+#   start_hold/final_hold = adaptive hold time range for the week
+#   start_reps/final_reps = adaptive rep target range for the week
+#   final_hold/final_reps are also what Day 7 assessment tests against
 # ──────────────────────────────────────────────
+REHAB_WEEKS = [
+    {
+        "label": "Week 1", "max_angle": 45,
+        "tip": "Gentle pendulum — let gravity do the work.",
+        "goal_label": "45° goal",
+        "encourage": ["Easy does it!", "Great start!", "Listen to your body."],
+        "theme_col": (180, 210, 255), "bg_tint": (10, 8, 22),
+        "bar_style": "thin", "tempo": "slow", "timbre": "sparse",
+        "start_hold": 5.0, "final_hold": 10.0,
+        "start_reps": 5,   "final_reps": 10,
+    },
+    {
+        "label": "Week 2", "max_angle": 70,
+        "tip": "Active-assisted range. Use your good arm if needed.",
+        "goal_label": "70° goal",
+        "encourage": ["Nice progress!", "Smooth and steady.", "You're doing great!"],
+        "theme_col": (180, 255, 210), "bg_tint": (8, 18, 14),
+        "bar_style": "normal", "tempo": "moderate", "timbre": "duet",
+        "start_hold": 10.5, "final_hold": 15.0,
+        "start_reps": 7,   "final_reps": 12,
+    },
+    {
+        "label": "Week 3", "max_angle": 90,
+        "tip": "Reach shoulder height — no higher than comfortable.",
+        "goal_label": "90° goal (shoulder height)",
+        "encourage": ["Shoulder height reached!", "Beautiful form!", "Keep it smooth."],
+        "theme_col": (255, 200, 140), "bg_tint": (18, 12, 6),
+        "bar_style": "normal", "tempo": "moderate", "timbre": "triad",
+        "start_hold": 16.0, "final_hold": 20.0,
+        "start_reps": 9,   "final_reps": 14,
+    },
+    {
+        "label": "Week 4", "max_angle": 110,
+        "tip": "Push gently past shoulder — stop at any pain.",
+        "goal_label": "110° goal",
+        "encourage": ["Above the shoulder!", "Strong work!", "Steady progress."],
+        "theme_col": (255, 140, 180), "bg_tint": (20, 6, 14),
+        "bar_style": "wide", "tempo": "lively", "timbre": "power",
+        "start_hold": 20.5, "final_hold": 25.0,
+        "start_reps": 11,  "final_reps": 16,
+    },
+    {
+        "label": "Week 5", "max_angle": 130,
+        "tip": "Approaching overhead. Never force through pain.",
+        "goal_label": "130° goal",
+        "encourage": ["Almost overhead!", "Excellent control!", "You've come far!"],
+        "theme_col": (200, 140, 255), "bg_tint": (14, 6, 22),
+        "bar_style": "wide", "tempo": "lively", "timbre": "full",
+        "start_hold": 26.0, "final_hold": 40.0,
+        "start_reps": 13,  "final_reps": 18,
+    },
+    {
+        "label": "Week 6+", "max_angle": 160,
+        "tip": "Full functional range. Quality over height.",
+        "goal_label": "160° full range",
+        "encourage": ["Full orchestra!", "Peak performance!", "The kingdom sings!"],
+        "theme_col": (255, 220, 80), "bg_tint": (18, 14, 4),
+        "bar_style": "wide", "tempo": "triumphant", "timbre": "orchestra",
+        "start_hold": 41.0, "final_hold": 60.0,
+        "start_reps": 15,  "final_reps": 20,
+    },
+]
+LAST_WEEK_IDX = len(REHAB_WEEKS) - 1
+
+# ──────────────────────────────────────────────
+# PERSISTENCE — week / day / session state machine
+# ──────────────────────────────────────────────
+def today_str():
+    return str(date.today())
+
+def _default_progress():
+    w = REHAB_WEEKS[0]
+    return {
+        "week_idx": 0,
+        "day_number": 1,                 # 1..7, day 7 = assessment day
+        "last_active_date": None,
+        "hold_target": w["start_hold"],  # today's adaptive hold target
+        "rep_target": w["start_reps"],   # today's adaptive rep target
+        "morning_done": False,
+        "evening_done": False,
+        "today_morning_record": None,    # {"rom":bool,"hold":bool,"reps":bool}
+        "today_evening_record": None,
+        "day7_morning": None,
+        "day7_evening": None,
+        "streak": 0,
+        "kingdom": [False] * len(REHAB_WEEKS),
+        "last_result": None,             # "WEEK_COMPLETE" / "WEEK_EXTENDED"
+    }
+
 def load_progress():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE) as f:
-            return json.load(f)
-    return {
-        "days": [],                # list of {date, max_angle, max_hold, week}
-        "hold_target": 3.0,        # adaptive hold target (seconds)
-        "rom_penalty_days": 0,     # how many more days the target stays reduced
-        "rom_penalty_offset": 0,   # degrees subtracted from week target during penalty
-        "trend": "STEADY",         # UP / DROP / STEADY
-        "all_time_best_angle": 0,
-        "all_time_best_hold": 0.0,
-    }
+            p = json.load(f)
+        # backfill any missing keys (schema upgrades)
+        for k, v in _default_progress().items():
+            p.setdefault(k, v)
+        return p
+    return _default_progress()
 
 def save_progress(p):
     with open(DATA_FILE, "w") as f:
         json.dump(p, f, indent=2)
 
-prog = load_progress()
+def _reset_week_targets(prog):
+    w = REHAB_WEEKS[prog["week_idx"]]
+    prog["hold_target"] = w["start_hold"]
+    prog["rep_target"] = w["start_reps"]
 
-def get_today_entry():
-    today = str(date.today())
-    return next((d for d in prog["days"] if d["date"] == today), None)
+def _adapt_daily_targets(prog, good_day, poor_day):
+    """Only Hold Time and Rep Target ever move. ROM goal is untouched."""
+    w = REHAB_WEEKS[prog["week_idx"]]
+    if good_day:
+        prog["hold_target"] = min(w["final_hold"], round(prog["hold_target"] + 2, 1))
+        prog["rep_target"] = min(w["final_reps"], prog["rep_target"] + 1)
+    elif poor_day:
+        prog["hold_target"] = max(w["start_hold"], round(prog["hold_target"] - 2, 1))
+        prog["rep_target"] = max(3, prog["rep_target"] - 2)
+    # else steady -> no change
 
-def get_yesterday_entry():
-    yesterday = str(date.today() - timedelta(days=1))
-    return next((d for d in prog["days"] if d["date"] == yesterday), None)
+def _close_out_day(prog):
+    """Roll one elapsed calendar day: handles Day-7 assessment or a normal
+    adaptive day, then clears the day's session flags."""
+    day_num = prog["day_number"]
+    m_done, e_done = prog["morning_done"], prog["evening_done"]
 
-def commit_session(max_angle, max_hold, week_idx):
-    """Called on quit — updates daily log and recalculates adaptive targets."""
-    today = str(date.today())
-    entry = get_today_entry()
-    if entry is None:
-        entry = {"date": today, "max_angle": 0, "max_hold": 0.0, "week": week_idx}
-        prog["days"].append(entry)
-
-    # Only update if better
-    entry["max_angle"] = max(entry["max_angle"], int(max_angle))
-    entry["max_hold"]  = max(entry["max_hold"],  round(max_hold, 1))
-    entry["week"]      = week_idx
-
-    # All-time bests
-    prog["all_time_best_angle"] = max(prog["all_time_best_angle"], entry["max_angle"])
-    prog["all_time_best_hold"]  = max(prog["all_time_best_hold"],  entry["max_hold"])
-
-    # Adaptive logic vs yesterday
-    yesterday = get_yesterday_entry()
-    if yesterday:
-        prev_angle = yesterday["max_angle"]
-        prev_hold  = yesterday["max_hold"]
-
-        if max_angle < prev_angle:
-            # Performed worse → reduce daily ROM target for next 2 days
-            drop = max(5, int((prev_angle - max_angle) * 0.5))
-            prog["rom_penalty_days"]   = 2
-            prog["rom_penalty_offset"] = drop
-            prog["trend"] = "DROP"
-        elif max_angle > prev_angle:
-            # Performed better → increase hold target
-            boost = 1.0 if max_angle - prev_angle < 10 else 2.0
-            prog["hold_target"] = min(prog["hold_target"] + boost, 30.0)
-            prog["trend"] = "UP"
-            # Also reduce penalty if recovering
-            prog["rom_penalty_days"] = max(0, prog["rom_penalty_days"] - 1)
+    if day_num == 7:
+        m = prog.get("day7_morning")
+        e = prog.get("day7_evening")
+        m_pass = bool(m) and m["rom"] and m["hold"] and m["reps"]
+        e_pass = bool(e) and e["rom"] and e["hold"] and e["reps"]
+        if m_pass and e_pass:
+            prog["kingdom"][prog["week_idx"]] = True
+            prog["last_result"] = "WEEK_COMPLETE"
+            if prog["week_idx"] < LAST_WEEK_IDX:
+                prog["week_idx"] += 1
         else:
-            prog["trend"] = "STEADY"
-            prog["rom_penalty_days"] = max(0, prog["rom_penalty_days"] - 1)
+            prog["last_result"] = "WEEK_EXTENDED"
+        _reset_week_targets(prog)
+        prog["day_number"] = 1
+        prog["day7_morning"] = None
+        prog["day7_evening"] = None
+        prog["streak"] = prog["streak"] + 1 if (m_done or e_done) else 0
     else:
-        prog["trend"] = "STEADY"
+        good_day = poor_day = False
+        if not m_done and not e_done:
+            poor_day = True
+        else:   
+            hit_full = False
+            hit_none = True
+            for rec in (prog.get("today_morning_record"), prog.get("today_evening_record")):
+                if rec:
+                    if rec["hold"] and rec["reps"]:
+                        hit_full = True
+                    if rec["hold"] or rec["reps"]:
+                        hit_none = False
+            good_day = hit_full
+            poor_day = hit_none and not hit_full
+        _adapt_daily_targets(prog, good_day, poor_day)
+        prog["day_number"] = min(7, day_num + 1)
+        prog["streak"] = prog["streak"] + 1 if (m_done or e_done) else 0
 
+    prog["morning_done"] = False
+    prog["evening_done"] = False
+    prog["today_morning_record"] = None
+    prog["today_evening_record"] = None
+
+def advance_day_if_needed(prog):
+    today = today_str()
+    last = prog.get("last_active_date")
+    if last is None:
+        prog["last_active_date"] = today
+        save_progress(prog)
+        return
+    if last == today:
+        return
+    try:
+        elapsed = (date.fromisoformat(today) - date.fromisoformat(last)).days
+    except ValueError:
+        elapsed = 1
+    for _ in range(max(1, elapsed)):
+        _close_out_day(prog)
+    prog["last_active_date"] = today
     save_progress(prog)
 
-def effective_rom_target(base_target):
-    """Return today's ROM target, reduced if in penalty window."""
-    if prog["rom_penalty_days"] > 0:
-        return max(20, base_target - prog["rom_penalty_offset"])
-    return base_target
+def finalize_session(prog, slot, rom_met, hold_met, reps_met):
+    record = {"rom": bool(rom_met), "hold": bool(hold_met), "reps": bool(reps_met)}
+    if slot == "morning":
+        prog["morning_done"] = True
+        prog["today_morning_record"] = record
+        if prog["day_number"] == 7:
+            prog["day7_morning"] = record
+    else:
+        prog["evening_done"] = True
+        prog["today_evening_record"] = record
+        if prog["day_number"] == 7:
+            prog["day7_evening"] = record
+    prog["last_active_date"] = today_str()
+    save_progress(prog)
 
-def tick_penalty_on_new_day():
-    """Decrement penalty counter if we're on a new day vs last session."""
-    if prog["days"]:
-        last_date = prog["days"][-1]["date"]
-        if last_date != str(date.today()) and prog["rom_penalty_days"] > 0:
-            prog["rom_penalty_days"] = max(0, prog["rom_penalty_days"] - 1)
-            save_progress(prog)
-
-tick_penalty_on_new_day()
-
-# ──────────────────────────────────────────────
-# REHAB WEEK DEFINITIONS
-# ──────────────────────────────────────────────
-REHAB_WEEKS = [
-    {
-        "label":      "Week 1",
-        "max_angle":  45,
-        "tip":        "Gentle pendulum — let gravity do the work.",
-        "goal_label": "45° goal",
-        "encourage":  ["Easy does it!", "Great start!", "Listen to your body."],
-        "theme_col":  (180, 210, 255),
-        "bg_tint":    (10,  8,  22),
-        "bar_style":  "thin",
-        "tempo":      "slow",
-        "timbre":     "sparse",
-        "unlock_req": {"reps": 5, "hold_s": 2.0, "instruments": 3},
-    },
-    {
-        "label":      "Week 2",
-        "max_angle":  70,
-        "tip":        "Active-assisted range. Use your good arm if needed.",
-        "goal_label": "70° goal",
-        "encourage":  ["Nice progress!", "Smooth and steady.", "You're doing great!"],
-        "theme_col":  (180, 255, 210),
-        "bg_tint":    (8,  18,  14),
-        "bar_style":  "normal",
-        "tempo":      "moderate",
-        "timbre":     "duet",
-        "unlock_req": {"reps": 8, "hold_s": 3.0, "instruments": 4},
-    },
-    {
-        "label":      "Week 3",
-        "max_angle":  90,
-        "tip":        "Reach shoulder height — no higher than comfortable.",
-        "goal_label": "90° goal (shoulder height)",
-        "encourage":  ["Shoulder height reached!", "Beautiful form!", "Keep it smooth."],
-        "theme_col":  (255, 200, 140),
-        "bg_tint":    (18,  12,  6),
-        "bar_style":  "normal",
-        "tempo":      "moderate",
-        "timbre":     "triad",
-        "unlock_req": {"reps": 10, "hold_s": 4.0, "instruments": 5},
-    },
-    {
-        "label":      "Week 4",
-        "max_angle":  110,
-        "tip":        "Push gently past shoulder — stop at any pain.",
-        "goal_label": "110° goal",
-        "encourage":  ["Above the shoulder!", "Strong work!", "Steady progress."],
-        "theme_col":  (255, 140, 180),
-        "bg_tint":    (20,  6,  14),
-        "bar_style":  "wide",
-        "tempo":      "lively",
-        "timbre":     "power",
-        "unlock_req": {"reps": 12, "hold_s": 5.0, "instruments": 6},
-    },
-    {
-        "label":      "Week 5",
-        "max_angle":  130,
-        "tip":        "Approaching overhead. Never force through pain.",
-        "goal_label": "130° goal",
-        "encourage":  ["Almost overhead!", "Excellent control!", "You've come far!"],
-        "theme_col":  (200, 140, 255),
-        "bg_tint":    (14,  6,  22),
-        "bar_style":  "wide",
-        "tempo":      "lively",
-        "timbre":     "full",
-        "unlock_req": {"reps": 15, "hold_s": 6.0, "instruments": 6},
-    },
-    {
-        "label":      "Week 6+",
-        "max_angle":  160,
-        "tip":        "Full functional range. Quality over height.",
-        "goal_label": "160° full range",
-        "encourage":  ["Full orchestra!", "Peak performance!", "The kingdom sings!"],
-        "theme_col":  (255, 220, 80),
-        "bg_tint":    (18,  14,  4),
-        "bar_style":  "wide",
-        "tempo":      "triumphant",
-        "timbre":     "orchestra",
-        "unlock_req": None,
-    },
-]
+def default_session_slot():
+    return "morning" if time.localtime().tm_hour < 14 else "evening"
 
 # ──────────────────────────────────────────────
-# PERFORMANCE TRACKER (in-session)
-# ──────────────────────────────────────────────
-class PerfTracker:
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.reps        = 0
-        self.max_hold    = 0.0
-        self.instruments = 0
-        self.week_done   = False
-
-    def check_gate(self, week_idx):
-        req = REHAB_WEEKS[week_idx].get("unlock_req")
-        if req is None:
-            return True
-        return (self.reps        >= req["reps"] and
-                self.max_hold    >= req["hold_s"] and
-                self.instruments >= req["instruments"])
-
-# ──────────────────────────────────────────────
-# WEEK-SCALED UNLOCK ANGLES + HYSTERESIS
-# ──────────────────────────────────────────────
-def week_unlock_angles(week_idx):
-    max_a  = REHAB_WEEKS[week_idx]["max_angle"]
-    ratios = [0.15, 0.30, 0.48, 0.63, 0.78, 0.93]
-    return [max(5, int(max_a * r)) for r in ratios]
-
-RELOCK_MARGIN = 8
-
-# ──────────────────────────────────────────────
-# AUDIO ENGINE
+# AUDIO ENGINE  (unchanged musical building blocks from v3)
 # ──────────────────────────────────────────────
 pygame.mixer.pre_init(SAMPLE_RATE, -16, 2, CHUNK)
 pygame.init()
@@ -343,6 +363,10 @@ class AudioEngine:
 
 # ──────────────────────────────────────────────
 # INSTRUMENT VISUALS
+#   Unlocking is now driven by SESSION OBJECTIVE milestones, not raw angle:
+#     ROM objective met   -> instruments 0,1 awaken
+#     Hold objective met  -> instruments 2,3 awaken
+#     Reps objective met  -> instruments 4,5 awaken (100% restored)
 # ──────────────────────────────────────────────
 INSTRUMENT_NAMES = ["Triangle","Flute","Violin","Cello","Choir","Orchestra"]
 
@@ -391,37 +415,36 @@ class SoundBar:
                           (min(255,b+40),min(255,g+40),min(255,r+40)),1)
 
 class InstrumentSection:
-    def __init__(self, cx, cy, inst_info, unlock_angle, style="normal"):
+    """A single instrument's visual/audio slot. Unlock state is now set
+    directly by the OrchestraStage based on session-objective milestones."""
+    def __init__(self, cx, cy, inst_info, style="normal"):
         self.cx,self.cy   = cx,cy
         self.inst_info    = inst_info
-        self.unlock_angle = unlock_angle
-        self.relock_angle = unlock_angle - RELOCK_MARGIN
         self.unlocked     = False
         self.unlock_anim  = 0.0
         self.unlock_time  = None
-        r,g,b = inst_info["color"]
-        spacing=14; n_bars=12
-        start_x = cx-(n_bars*spacing)//2
-        self.bars      = [SoundBar(start_x+i*spacing,(r,g,b),style) for i in range(n_bars)]
         self.volume    = self.target_volume = 0.0
         self.particles = []
+        self._build_bars(style)
 
-    def reset_lock(self, new_unlock_angle, new_inst_info, style):
-        self.unlock_angle = new_unlock_angle
-        self.relock_angle = new_unlock_angle - RELOCK_MARGIN
+    def _build_bars(self, style):
+        r,g,b = self.inst_info["color"]
+        spacing=14; n_bars=12
+        start_x = self.cx-(n_bars*spacing)//2
+        self.bars = [SoundBar(start_x+i*spacing,(r,g,b),style) for i in range(n_bars)]
+
+    def reset_session(self, new_inst_info, style):
+        """Called at the start of every session — orchestra restarts at 0%."""
         self.inst_info    = new_inst_info
         self.unlocked     = False
         self.unlock_anim  = 0.0
         self.unlock_time  = None
         self.volume = self.target_volume = 0.0
         self.particles = []
-        r,g,b = new_inst_info["color"]
-        spacing=14; n_bars=12
-        start_x = self.cx-(n_bars*spacing)//2
-        self.bars = [SoundBar(start_x+i*spacing,(r,g,b),style) for i in range(n_bars)]
+        self._build_bars(style)
 
-    def try_unlock(self, t):
-        if not self.unlocked:
+    def set_unlocked(self, unlocked, t):
+        if unlocked and not self.unlocked:
             self.unlocked    = True
             self.unlock_time = t
             for _ in range(20):
@@ -432,25 +455,15 @@ class InstrumentSection:
                     "vx":math.cos(a)*s,"vy":math.sin(a)*s,
                     "life":1.0,"size":random.uniform(2,5),
                 })
-
-    def try_relock(self):
-        if self.unlocked:
+        elif not unlocked and self.unlocked:
             self.unlocked    = False
             self.unlock_anim = 0.0
             self.unlock_time = None
             self.volume = self.target_volume = 0.0
             self.particles = []
 
-    def update(self, t, global_angle):
-        if not self.unlocked and global_angle >= self.unlock_angle:
-            self.try_unlock(t)
-        elif self.unlocked and global_angle < self.relock_angle:
-            self.try_relock()
-        window = max(10, self.unlock_angle*0.3)
-        self.target_volume = (
-            min(1.0,(global_angle-self.unlock_angle+window*0.4)/window)
-            if self.unlocked else 0.0
-        )
+    def update(self, t):
+        self.target_volume = (0.55 + 0.45*abs(math.sin(t*1.4 + self.cx))) if self.unlocked else 0.0
         self.volume += (self.target_volume-self.volume)*0.1
         if self.unlock_time is not None:
             self.unlock_anim = min(1.0,(t-self.unlock_time)/0.8)
@@ -464,8 +477,8 @@ class InstrumentSection:
     def draw(self, frame, t):
         base_y = self.cy+30
         if not self.unlocked:
-            cv2.putText(frame, f">{int(self.unlock_angle)}\xb0",
-                        (self.cx-15,self.cy-25),cv2.FONT_HERSHEY_SIMPLEX,0.35,(70,70,80),1)
+            cv2.putText(frame, "locked",
+                        (self.cx-22,self.cy-25),cv2.FONT_HERSHEY_SIMPLEX,0.32,(70,70,80),1)
         else:
             r,g,b = self.inst_info["color"]
             a     = min(1.0, self.unlock_anim*2)
@@ -492,8 +505,34 @@ class InstrumentSection:
                        (int(b*al),int(g*al),int(r*al)),2)
 
 # ──────────────────────────────────────────────
-# ORCHESTRA STAGE
+# SESSION OBJECTIVES + ORCHESTRA STAGE
 # ──────────────────────────────────────────────
+class SessionObjectives:
+    """Tracks the 4 checklist items for the CURRENT session only."""
+    def __init__(self, rom_target, hold_target, rep_target):
+        self.rom_target  = rom_target
+        self.hold_target = hold_target
+        self.rep_target  = rep_target
+        self.reps          = 0
+        self.session_max_angle = 0.0
+        self.session_max_hold  = 0.0
+
+    @property
+    def rom_met(self):
+        return self.session_max_angle >= self.rom_target
+
+    @property
+    def hold_met(self):
+        return self.session_max_hold >= self.hold_target
+
+    @property
+    def reps_met(self):
+        return self.reps >= self.rep_target
+
+    @property
+    def orchestra_restored(self):
+        return self.rom_met and self.hold_met and self.reps_met
+
 class OrchestraStage:
     POSITIONS = [
         (W//2-420, H//2-20),(W//2-240, H//2-60),
@@ -501,76 +540,75 @@ class OrchestraStage:
         (W//2+280, H//2-20),(W//2+420, H//2+10),
     ]
 
-    def __init__(self, week_idx=0):
-        self.week_idx       = week_idx
-        self.perf           = PerfTracker()
+    def __init__(self, week_idx, objectives):
+        self.week_idx   = week_idx
+        self.objectives = objectives
         self.music_progress = 0.0
-        self.was_raised     = False
-        self.hold_start     = None
-        self.hold_time      = 0.0
-        self.session_best_angle = 0.0   # NEW: track this session's best
-        self.session_best_hold  = 0.0
+        self.was_raised = False
+        self.hold_start = None
+        self.hold_time  = 0.0
         self._build_sections(week_idx)
 
     def _build_sections(self, week_idx):
-        angles = week_unlock_angles(week_idx)
         colors = instrument_colors(week_idx)
         style  = REHAB_WEEKS[week_idx]["bar_style"]
         for i,info in enumerate(colors): info["name"] = INSTRUMENT_NAMES[i]
         self.sections = [
-            InstrumentSection(cx,cy,colors[i],angles[i],style)
+            InstrumentSection(cx,cy,colors[i],style)
             for i,(cx,cy) in enumerate(self.POSITIONS)
         ]
 
-    def set_week(self, week_idx):
-        self.week_idx = week_idx
-        angles = week_unlock_angles(week_idx)
+    def restart_session(self, week_idx, objectives):
+        """Reset the orchestra to 0% — called at the start of every session."""
+        self.week_idx   = week_idx
+        self.objectives = objectives
+        self.music_progress = 0.0
+        self.was_raised = False
+        self.hold_start = None
+        self.hold_time  = 0.0
         colors = instrument_colors(week_idx)
         style  = REHAB_WEEKS[week_idx]["bar_style"]
         for i,info in enumerate(colors): info["name"] = INSTRUMENT_NAMES[i]
         for i,section in enumerate(self.sections):
-            section.reset_lock(angles[i],colors[i],style)
-        self.music_progress = 0.0
-        self.perf.reset()
+            section.reset_session(colors[i], style)
 
     @property
-    def week_max(self):
-        return REHAB_WEEKS[self.week_idx]["max_angle"]
+    def rom_target(self):
+        return self.objectives.rom_target
 
     @property
     def total_unlocked(self):
         return sum(s.unlocked for s in self.sections)
 
     def update(self, angle, t):
-        # Track session best
-        if angle > self.session_best_angle:
-            self.session_best_angle = angle
+        obj = self.objectives
+        if angle > obj.session_max_angle:
+            obj.session_max_angle = angle
 
-        self.music_progress = min(100.0, self.music_progress+(angle/self.week_max)*0.05)
-
-        for s in self.sections:
-            s.update(t, angle)
-
-        raise_threshold = self.week_max * 0.4
+        # rep / hold counting: "raised" once past 40% of the week's ROM goal
+        raise_threshold = self.rom_target * 0.4
         if angle > raise_threshold:
             if not self.was_raised:
                 self.was_raised = True
                 self.hold_start = t
             self.hold_time = t - self.hold_start
-            if self.hold_time > self.perf.max_hold:
-                self.perf.max_hold = self.hold_time
-            if self.hold_time > self.session_best_hold:
-                self.session_best_hold = self.hold_time
+            if self.hold_time > obj.session_max_hold:
+                obj.session_max_hold = self.hold_time
         else:
             if self.was_raised:
-                self.perf.reps += 1
+                obj.reps += 1
             self.was_raised = False
             self.hold_start = None
             self.hold_time  = 0.0
 
-        self.perf.instruments = self.total_unlocked
-        if not self.perf.week_done:
-            self.perf.week_done = self.perf.check_gate(self.week_idx)
+        # milestone-driven instrument unlocking (0-1 ROM, 2-3 Hold, 4-5 Reps)
+        want_unlocked = [obj.rom_met, obj.rom_met, obj.hold_met, obj.hold_met,
+                          obj.reps_met, obj.reps_met]
+        for sec, want in zip(self.sections, want_unlocked):
+            sec.set_unlocked(want, t)
+            sec.update(t)
+
+        self.music_progress = (self.total_unlocked / 6.0) * 100.0
 
     def audio_state(self):
         return ([s.unlocked for s in self.sections],
@@ -587,42 +625,58 @@ class OrchestraStage:
             s.draw(frame, t)
 
 # ──────────────────────────────────────────────
-# WEEK SELECTOR OVERLAY
+# DAY BRIEFING OVERLAY  (pre-session screen)
 # ──────────────────────────────────────────────
-def draw_week_selector(frame, selected_idx, unlocked_weeks):
+def draw_day_briefing(frame, prog, chosen_slot):
+    week = REHAB_WEEKS[prog["week_idx"]]
+    is_day7 = prog["day_number"] == 7
+    kingdom_pct = int(100 * sum(prog["kingdom"]) / len(prog["kingdom"]))
+
     overlay = frame.copy()
-    cv2.rectangle(overlay,(W//2-340,H//2-250),(W//2+340,H//2+260),(12,8,22),-1)
+    cv2.rectangle(overlay,(W//2-360,H//2-260),(W//2+360,H//2+270),(12,8,22),-1)
     cv2.addWeighted(overlay,0.92,frame,0.08,0,frame)
-    cv2.rectangle(frame,(W//2-340,H//2-250),(W//2+340,H//2+260),(80,60,110),2)
-    cv2.putText(frame,"RECOVERY WEEK",
-                (W//2-120,H//2-215),cv2.FONT_HERSHEY_SIMPLEX,0.75,(200,160,255),2)
-    cv2.putText(frame,"Complete week goals to unlock the next",
-                (W//2-190,H//2-188),cv2.FONT_HERSHEY_SIMPLEX,0.38,(140,130,160),1)
-    for i,week in enumerate(REHAB_WEEKS):
-        y      = H//2-155+i*56
-        is_sel = (i==selected_idx)
-        avail  = i in unlocked_weeks
-        bg_col = (40,28,60) if is_sel else (18,14,30)
-        cv2.rectangle(frame,(W//2-325,y-24),(W//2+325,y+28),bg_col,-1)
-        border = (160,100,255) if is_sel else ((60,50,80) if avail else (35,30,45))
-        cv2.rectangle(frame,(W//2-325,y-24),(W//2+325,y+28),border,1 if not is_sel else 2)
-        label_col = (210,170,255) if is_sel else ((120,110,140) if avail else (60,55,70))
-        cv2.putText(frame,f"{i+1}  {week['label']}  (up to {week['max_angle']}\xb0)",
-                    (W//2-310,y+6),cv2.FONT_HERSHEY_SIMPLEX,0.42,label_col,1)
-        tip_col = (160,200,160) if is_sel else ((70,80,70) if avail else (45,45,50))
-        cv2.putText(frame,week["tip"],
-                    (W//2-310,y+22),cv2.FONT_HERSHEY_SIMPLEX,0.30,tip_col,1)
-        req = week.get("unlock_req")
-        if not avail and req:
-            cv2.putText(frame,
-                        f"Need: {req['reps']}reps  {req['hold_s']:.0f}s hold  {req['instruments']} instruments",
-                        (W//2-310,y+35),cv2.FONT_HERSHEY_SIMPLEX,0.28,(90,70,100),1)
-        arc_cx = W//2+295
-        sweep  = int(week["max_angle"]*0.75)
-        arc_col = (160,100,255) if is_sel else (60,50,80)
-        cv2.ellipse(frame,(arc_cx,y+2),(18,18),-90,-sweep//2,sweep//2,arc_col,2)
-    cv2.putText(frame,"1-6 select  |  ENTER confirm  |  locked weeks require performance goals",
-                (W//2-270,H//2+240),cv2.FONT_HERSHEY_SIMPLEX,0.30,(90,85,110),1)
+    cv2.rectangle(frame,(W//2-360,H//2-260),(W//2+360,H//2+270),(80,60,110),2)
+
+    cv2.putText(frame,"RehabVerse — Daily Briefing",
+                (W//2-190,H//2-220),cv2.FONT_HERSHEY_SIMPLEX,0.72,(200,160,255),2)
+
+    if prog["last_result"] == "WEEK_COMPLETE":
+        cv2.putText(frame,"Week Complete! New week unlocked.",
+                    (W//2-190,H//2-188),cv2.FONT_HERSHEY_SIMPLEX,0.42,(80,220,120),1)
+    elif prog["last_result"] == "WEEK_EXTENDED":
+        cv2.putText(frame,"Week Extended — let's give it another pass.",
+                    (W//2-210,H//2-188),cv2.FONT_HERSHEY_SIMPLEX,0.42,(220,160,80),1)
+    else:
+        cv2.putText(frame,f"{week['label']}  |  {week['goal_label']}",
+                    (W//2-150,H//2-188),cv2.FONT_HERSHEY_SIMPLEX,0.42,(160,150,190),1)
+
+    y = H//2-140
+    lines = [
+        (f"Week: {prog['week_idx']+1}   Day: {prog['day_number']}/7"
+         + ("   *** ASSESSMENT DAY ***" if is_day7 else ""), (255,220,120) if is_day7 else (200,200,210)),
+        (f"Weekly ROM Goal (fixed): {week['max_angle']}\xb0", (int(week['theme_col'][2]),int(week['theme_col'][1]),int(week['theme_col'][0]))),
+    ]
+    if is_day7:
+        lines.append((f"Assessment targets — Hold: {week['final_hold']:.1f}s   Reps: {week['final_reps']}", (255,220,120)))
+    else:
+        lines.append((f"Today's Hold Target: {prog['hold_target']:.1f}s   Today's Rep Target: {prog['rep_target']}", (200,200,210)))
+    lines.append((f"Morning Session: {'DONE' if prog['morning_done'] else 'pending'}", (80,220,120) if prog['morning_done'] else (150,140,170)))
+    lines.append((f"Evening Session: {'DONE' if prog['evening_done'] else 'pending'}", (80,220,120) if prog['evening_done'] else (150,140,170)))
+    lines.append((f"Kingdom Restoration: {kingdom_pct}%  ({sum(prog['kingdom'])}/{len(prog['kingdom'])} families)", (255,200,60)))
+    lines.append((f"Current Streak: {prog['streak']} day(s)", (150,180,255)))
+
+    for text,col in lines:
+        cv2.putText(frame,text,(W//2-320,y),cv2.FONT_HERSHEY_SIMPLEX,0.42,col,1)
+        y += 34
+
+    y += 10
+    m_col = (255,255,255) if chosen_slot=="morning" else (140,130,160)
+    e_col = (255,255,255) if chosen_slot=="evening" else (140,130,160)
+    cv2.putText(frame,"[M] Morning Session", (W//2-320,y), cv2.FONT_HERSHEY_SIMPLEX,0.46,m_col,2 if chosen_slot=="morning" else 1)
+    cv2.putText(frame,"[E] Evening Session", (W//2+30,y), cv2.FONT_HERSHEY_SIMPLEX,0.46,e_col,2 if chosen_slot=="evening" else 1)
+    y += 40
+    cv2.putText(frame,"Press ENTER/SPACE to begin the highlighted session, or Q to quit.",
+                (W//2-320,y),cv2.FONT_HERSHEY_SIMPLEX,0.34,(120,115,140),1)
 
 # ──────────────────────────────────────────────
 # POSE HELPERS
@@ -656,132 +710,83 @@ def draw_conductor_arc(frame, angle, cx, cy, week_max, theme_col):
     cv2.circle(frame,(tx,ty),3,(180,100,255),-1)
 
 # ──────────────────────────────────────────────
-# HUD  ← main changes here
+# IN-SESSION HUD  — Objectives checklist + Daily Dashboard
 # ──────────────────────────────────────────────
-def draw_hud(frame, angle, stage, t, next_week_ready):
+def draw_hud(frame, angle, stage, prog, slot, is_day7):
     week     = REHAB_WEEKS[stage.week_idx]
-    week_max = stage.week_max
-    perf     = stage.perf
-    req      = week.get("unlock_req")
+    obj      = stage.objectives
     theme    = week["theme_col"]
     tr,tg,tb = theme
 
-    # Adaptive target for today
-    today_target = effective_rom_target(week_max)
-    hold_target  = prog["hold_target"]
-
-    # Pull history
-    yesterday   = get_yesterday_entry()
-    today_entry = get_today_entry()
-    atb_angle   = prog["all_time_best_angle"]
-    atb_hold    = prog["all_time_best_hold"]
-    trend       = prog["trend"]
-    penalty_days= prog["rom_penalty_days"]
-
     panel = frame.copy()
-    cv2.rectangle(panel,(10,10),(400,360),(10,8,18),-1)
+    cv2.rectangle(panel,(10,10),(410,400),(10,8,18),-1)
     cv2.addWeighted(panel,0.80,frame,0.20,0,frame)
-    cv2.rectangle(frame,(10,10),(400,360),(int(tb*0.3),int(tg*0.3),int(tr*0.3)),1)
+    cv2.rectangle(frame,(10,10),(410,400),(int(tb*0.3),int(tg*0.3),int(tr*0.3)),1)
 
     cv2.putText(frame,"THE FORGOTTEN ORCHESTRA",
-                (20,36),cv2.FONT_HERSHEY_SIMPLEX,0.48,(int(tb),int(tg),int(tr)),1)
-    cv2.putText(frame,f"{week['label']}  |  {week['goal_label']}",
-                (20,56),cv2.FONT_HERSHEY_SIMPLEX,0.38,(160,100,255),1)
+                (20,34),cv2.FONT_HERSHEY_SIMPLEX,0.46,(int(tb),int(tg),int(tr)),1)
+    session_label = f"{slot.capitalize()} Session" + ("  (ASSESSMENT)" if is_day7 else "")
+    cv2.putText(frame,f"{week['label']}  |  Day {prog['day_number']}/7  |  {session_label}",
+                (20,54),cv2.FONT_HERSHEY_SIMPLEX,0.36,(160,100,255),1)
 
-    # ── Adaptive ROM target bar ──
-    target_col = (80,80,200) if penalty_days>0 else (int(tb*0.3),int(tg*0.8),int(tr*0.3))
-    target_label = f"Today target: {today_target}\xb0" + (f"  [{penalty_days}d reduced]" if penalty_days>0 else "")
-    cv2.putText(frame,target_label,
-                (20,76),cv2.FONT_HERSHEY_SIMPLEX,0.36,(180,170,200),1)
-    cv2.rectangle(frame,(20,81),(220,91),(35,30,50),-1)
-    fill = int(200*min(angle,today_target)/today_target)
-    cv2.rectangle(frame,(20,81),(20+fill,91),target_col,-1)
-    # Also show where the real week_max is
-    tick_x = 20+int(200*week_max/today_target) if today_target>0 else 220
-    if today_target < week_max and tick_x <= 220:
-        cv2.line(frame,(tick_x,79),(tick_x,93),(100,80,140),1)
+    # ── Today's Objectives checklist ──
+    cv2.putText(frame,"Today's Objectives", (20,78), cv2.FONT_HERSHEY_SIMPLEX,0.40,(220,215,230),1)
+    def box(y, done, label):
+        mark = "\u2611" if done else "\u2610"
+        col  = (60,200,80) if done else (150,145,165)
+        cv2.putText(frame, f"{mark} {label}", (26,y), cv2.FONT_HERSHEY_SIMPLEX,0.36,col,1)
 
-    cv2.putText(frame,week["tip"],
-                (20,110),cv2.FONT_HERSHEY_SIMPLEX,0.30,(120,180,140),1)
+    box(100, obj.rom_met,  f"Reach {week['max_angle']}\xb0  (now {int(angle)}\xb0)")
+    box(120, obj.hold_met, f"Hold {obj.hold_target:.1f}s  (best {obj.session_max_hold:.1f}s)")
+    box(140, obj.reps_met, f"Complete {obj.rep_target} reps  (done {obj.reps})")
+    box(160, obj.orchestra_restored, "Restore Orchestra")
 
-    # ── Hold target ──
-    hold_col = (60,200,80) if stage.hold_time>=hold_target else (int(tb*0.5),int(tg*0.5),int(tr))
-    cv2.putText(frame,f"Hold target: {hold_target:.1f}s   Current: {stage.hold_time:.1f}s",
-                (20,126),cv2.FONT_HERSHEY_SIMPLEX,0.36,hold_col,1)
-    cv2.rectangle(frame,(20,131),(220,141),(35,30,50),-1)
-    hold_fill = int(200*min(stage.hold_time/max(hold_target,0.1),1.0))
-    cv2.rectangle(frame,(20,131),(20+hold_fill,141),hold_col,-1)
+    cv2.line(frame,(15,172),(405,172),(50,45,65),1)
 
-    # ── Music progress ──
-    cv2.putText(frame,f"Music restored: {int(stage.music_progress)}%",
-                (20,158),cv2.FONT_HERSHEY_SIMPLEX,0.36,(180,170,200),1)
-    cv2.rectangle(frame,(20,163),(220,173),(35,30,50),-1)
-    cv2.rectangle(frame,(20,163),(20+int(200*stage.music_progress/100),173),
+    # ── ROM progress bar (fixed goal) ──
+    rom_col = (60,200,80) if obj.rom_met else (int(tb*0.3),int(tg*0.8),int(tr*0.3))
+    cv2.putText(frame,f"Weekly ROM (fixed): {week['max_angle']}\xb0",
+                (20,190),cv2.FONT_HERSHEY_SIMPLEX,0.34,(180,170,200),1)
+    cv2.rectangle(frame,(20,195),(220,205),(35,30,50),-1)
+    fill = int(200*min(angle,week['max_angle'])/week['max_angle'])
+    cv2.rectangle(frame,(20,195),(20+fill,205),rom_col,-1)
+
+    # ── Hold bar ──
+    hold_col = (60,200,80) if obj.hold_met else (int(tb*0.5),int(tg*0.5),int(tr))
+    cv2.putText(frame,f"Hold target: {obj.hold_target:.1f}s   Current: {stage.hold_time:.1f}s",
+                (20,222),cv2.FONT_HERSHEY_SIMPLEX,0.34,hold_col,1)
+    cv2.rectangle(frame,(20,227),(220,237),(35,30,50),-1)
+    hold_fill = int(200*min(stage.hold_time/max(obj.hold_target,0.1),1.0))
+    cv2.rectangle(frame,(20,227),(20+hold_fill,237),hold_col,-1)
+
+    # ── Music / orchestra progress ──
+    cv2.putText(frame,f"Today's Orchestra: {int(stage.music_progress)}%",
+                (20,258),cv2.FONT_HERSHEY_SIMPLEX,0.36,(180,170,200),1)
+    cv2.rectangle(frame,(20,263),(220,273),(35,30,50),-1)
+    cv2.rectangle(frame,(20,263),(20+int(200*stage.music_progress/100),273),
                   (int(tb*0.7),int(tg*0.4),int(tr*0.7)),-1)
-
     cv2.putText(frame,f"Instruments: {stage.total_unlocked}/6",
-                (20,190),cv2.FONT_HERSHEY_SIMPLEX,0.36,(160,150,180),1)
-    cv2.putText(frame,f"Reps: {perf.reps}   Best hold: {perf.max_hold:.1f}s",
-                (20,206),cv2.FONT_HERSHEY_SIMPLEX,0.34,(160,150,180),1)
+                (20,290),cv2.FONT_HERSHEY_SIMPLEX,0.34,(160,150,180),1)
 
     colors = instrument_colors(stage.week_idx)
-    cv2.putText(frame,"Awakened:",(20,222),cv2.FONT_HERSHEY_SIMPLEX,0.30,(120,110,140),1)
     for i,(info,sec) in enumerate(zip(colors,stage.sections)):
         r,g,b = info["color"]
         col   = (int(b*0.7),int(g*0.7),int(r*0.7)) if sec.unlocked else (40,40,50)
-        cv2.circle(frame,(95+i*22,219),6,col,-1)
+        cv2.circle(frame,(35+i*22,306),6,col,-1)
 
-    # ── Daily comparison panel ──
-    cv2.line(frame,(15,232),(395,232),(50,45,65),1)
+    cv2.line(frame,(15,320),(405,320),(50,45,65),1)
 
-    # Session best (this run)
-    sb = int(stage.session_best_angle)
-    sb_col = (60,200,80) if sb>=today_target else (int(tb),int(tg),int(tr))
-    cv2.putText(frame,f"This session: {sb}\xb0  hold: {stage.session_best_hold:.1f}s",
-                (20,248),cv2.FONT_HERSHEY_SIMPLEX,0.36,sb_col,1)
-
-    # Yesterday
-    if yesterday:
-        yd_col = (100,160,100) if yesterday["max_angle"]<=sb else (140,100,100)
-        cv2.putText(frame,f"Yesterday:    {yesterday['max_angle']}\xb0  hold: {yesterday['max_hold']:.1f}s",
-                    (20,264),cv2.FONT_HERSHEY_SIMPLEX,0.34,yd_col,1)
-    else:
-        cv2.putText(frame,"Yesterday:    --  (first session!)",
-                    (20,264),cv2.FONT_HERSHEY_SIMPLEX,0.34,(80,80,100),1)
-
-    # All-time best
-    atb_col = (255,200,60) if atb_angle>0 else (70,70,90)
-    cv2.putText(frame,f"All-time best: {atb_angle}\xb0  hold: {atb_hold:.1f}s",
-                (20,280),cv2.FONT_HERSHEY_SIMPLEX,0.34,atb_col,1)
-
-    # Trend badge
-    trend_sym  = "▲ IMPROVING — hold +boosted"  if trend=="UP"   else \
-                 f"▼ DROPPED — target -reduced ({penalty_days}d)" if trend=="DROP" else \
-                 "● STEADY"
-    trend_col  = (60,200,80) if trend=="UP" else (60,80,200) if trend=="DROP" else (100,100,120)
-    cv2.putText(frame,trend_sym,
-                (20,296),cv2.FONT_HERSHEY_SIMPLEX,0.34,trend_col,1)
-
-    # ── Performance gate ──
-    if req:
-        cv2.line(frame,(15,306),(395,306),(50,45,65),1)
-        def gc(done): return (60,200,80) if done else (120,100,140)
-        r_done=perf.reps>=req["reps"]
-        h_done=perf.max_hold>=req["hold_s"]
-        i_done=perf.instruments>=req["instruments"]
-        cv2.putText(frame,f"Gate — Reps {perf.reps}/{req['reps']}",
-                    (20,320),cv2.FONT_HERSHEY_SIMPLEX,0.30,gc(r_done),1)
-        cv2.putText(frame,f"Hold {perf.max_hold:.1f}/{req['hold_s']:.0f}s",
-                    (160,320),cv2.FONT_HERSHEY_SIMPLEX,0.30,gc(h_done),1)
-        cv2.putText(frame,f"Inst {perf.instruments}/{req['instruments']}",
-                    (280,320),cv2.FONT_HERSHEY_SIMPLEX,0.30,gc(i_done),1)
-
-    if next_week_ready and stage.week_idx < len(REHAB_WEEKS)-1:
-        cv2.putText(frame,">> Week goal met! Press W to advance <<",
-                    (20,340),cv2.FONT_HERSHEY_SIMPLEX,0.38,(int(tb),int(tg),int(tr)),1)
+    # ── Daily dashboard (long-term) ──
+    kingdom_pct = int(100 * sum(prog["kingdom"]) / len(prog["kingdom"]))
+    cv2.putText(frame,f"Kingdom Restoration: {kingdom_pct}%  |  Streak: {prog['streak']}d",
+                (20,338),cv2.FONT_HERSHEY_SIMPLEX,0.34,(255,200,60),1)
+    m_txt = "DONE" if prog["morning_done"] or slot=="morning" else "pending"
+    e_txt = "DONE" if prog["evening_done"] or slot=="evening" else "pending"
+    cv2.putText(frame,f"Morning: {m_txt}   Evening: {e_txt}",
+                (20,356),cv2.FONT_HERSHEY_SIMPLEX,0.34,(160,150,180),1)
 
     # ── Encouragement ──
-    progress_pct = angle/week_max if week_max>0 else 0
+    progress_pct = angle/week['max_angle'] if week['max_angle']>0 else 0
     encourage    = week["encourage"]
     if angle < 5:
         msg,col = "Raise your arm gently to begin!",(100,100,120)
@@ -795,12 +800,19 @@ def draw_hud(frame, angle, stage, t, next_week_ready):
         msg,col = f"{week['goal_label']} reached! Wonderful!",(int(tb),int(tg),int(tr))
     cv2.putText(frame,msg,(W//2-len(msg)*5,H-30),cv2.FONT_HERSHEY_SIMPLEX,0.62,col,2)
 
+    if obj.orchestra_restored:
+        cv2.putText(frame,"Orchestra Fully Restored! Press Q to save & finish.",
+                    (W//2-260,60),cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,220,80),2)
+
 # ──────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────
 def main():
-    print("RehabVerse — The Forgotten Orchestra  (v3)")
-    print("  Daily adaptive targets + session history\n")
+    print("RehabVerse — The Forgotten Orchestra  (v4)")
+    print("  Fixed weekly ROM + adaptive hold/reps + two sessions/day + Day 7 assessment\n")
+
+    prog = load_progress()
+    advance_day_if_needed(prog)
 
     mp_pose_    = mp.solutions.pose
     mp_drawing_ = mp.solutions.drawing_utils
@@ -809,33 +821,39 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  W)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, H)
 
-    unlocked_weeks = {0}
-    selected_week  = 0
-    in_selector    = True
-    ret, bg_frame  = cap.read()
+    ret, bg_frame = cap.read()
     if ret: bg_frame = cv2.flip(bg_frame,1)
     else:   bg_frame = np.zeros((H,W,3),dtype=np.uint8)
 
-    while in_selector:
+    # ── Day briefing screen ──
+    chosen_slot = default_session_slot()
+    in_briefing = True
+    while in_briefing:
         frame = bg_frame.copy()
         dark  = np.zeros_like(frame,dtype=np.uint8); dark[:] = (15,10,25)
         cv2.addWeighted(dark,0.6,frame,0.4,0,frame)
-        draw_week_selector(frame, selected_week, unlocked_weeks)
+        draw_day_briefing(frame, prog, chosen_slot)
         cv2.imshow("RehabVerse — The Forgotten Orchestra", frame)
         key = cv2.waitKey(30) & 0xFF
-        if key in [ord(str(i)) for i in range(1,7)]:
-            candidate = key - ord('1')
-            if candidate in unlocked_weeks:
-                selected_week = candidate
-        elif key in [13, ord('\r'), ord(' ')]:
-            in_selector = False
+        if key in (ord('m'), ord('M')):
+            chosen_slot = "morning"
+        elif key in (ord('e'), ord('E')):
+            chosen_slot = "evening"
+        elif key in (13, ord('\r'), ord(' ')):
+            in_briefing = False
         elif key == ord('q'):
             cap.release(); cv2.destroyAllWindows(); pygame.quit(); return
 
-    stage        = OrchestraStage(week_idx=selected_week)
-    audio_engine = AudioEngine(week_idx=selected_week)
+    week_idx = prog["week_idx"]
+    week     = REHAB_WEEKS[week_idx]
+    is_day7  = prog["day_number"] == 7
+    hold_target = week["final_hold"] if is_day7 else prog["hold_target"]
+    rep_target  = week["final_reps"] if is_day7 else prog["rep_target"]
+
+    objectives   = SessionObjectives(week["max_angle"], hold_target, rep_target)
+    stage        = OrchestraStage(week_idx, objectives)
+    audio_engine = AudioEngine(week_idx=week_idx)
     smoothed_angle = 0.0
-    show_selector  = False
 
     with mp_pose_.Pose(min_detection_confidence=0.6,
                        min_tracking_confidence=0.6) as pose:
@@ -858,71 +876,90 @@ def main():
                 ls = lm[mp_pose_.PoseLandmark.LEFT_SHOULDER.value]
                 draw_conductor_arc(frame, angle,
                                    int(ls.x*W), int(ls.y*H),
-                                   stage.week_max,
-                                   REHAB_WEEKS[stage.week_idx]["theme_col"])
+                                   week["max_angle"],
+                                   week["theme_col"])
                 mp_drawing_.draw_landmarks(
                     frame, results.pose_landmarks, mp_pose_.POSE_CONNECTIONS,
                     mp_drawing_.DrawingSpec(color=(80,70,100),thickness=1,circle_radius=2),
                     mp_drawing_.DrawingSpec(color=(70,60,90), thickness=1))
 
-            bg_col = REHAB_WEEKS[stage.week_idx]["bg_tint"]
+            bg_col = week["bg_tint"]
             dark   = np.zeros_like(frame,dtype=np.uint8); dark[:] = bg_col
             cv2.addWeighted(dark,0.45,frame,0.55,0,frame)
 
             stage.update(angle, t)
             stage.draw(frame, t)
 
-            if stage.perf.week_done and stage.week_idx+1 < len(REHAB_WEEKS):
-                unlocked_weeks.add(stage.week_idx+1)
-
             unlocked, volumes = stage.audio_state()
             audio_engine.update(unlocked, volumes, t)
 
-            next_week_ready = stage.perf.week_done and stage.week_idx < len(REHAB_WEEKS)-1
-            draw_hud(frame, angle, stage, t, next_week_ready)
-            cv2.putText(frame,"Q quit & save  |  W change week",
-                        (W-250,H-15),cv2.FONT_HERSHEY_SIMPLEX,0.38,(70,65,85),1)
-
-            if show_selector:
-                draw_week_selector(frame, stage.week_idx, unlocked_weeks)
+            draw_hud(frame, angle, stage, prog, chosen_slot, is_day7)
+            cv2.putText(frame,"Q quit & save session",
+                        (W-230,H-15),cv2.FONT_HERSHEY_SIMPLEX,0.38,(70,65,85),1)
 
             cv2.imshow("RehabVerse — The Forgotten Orchestra", frame)
             key = cv2.waitKey(1) & 0xFF
-
             if key == ord('q'):
                 break
-            elif key in (ord('w'), ord('W')):
-                show_selector = not show_selector
-            elif show_selector:
-                if key in [ord(str(i)) for i in range(1,7)]:
-                    candidate = key - ord('1')
-                    if candidate in unlocked_weeks:
-                        stage.set_week(candidate)
-                        audio_engine.set_week(candidate)
-                elif key in [13, ord('\r'), ord(' ')]:
-                    show_selector = False
 
     # ── Save session on quit ──
-    commit_session(stage.session_best_angle, stage.session_best_hold, stage.week_idx)
+    obj = stage.objectives
+    finalize_session(prog, chosen_slot, obj.rom_met, obj.hold_met, obj.reps_met)
+
     audio_engine.stop()
     cap.release()
     cv2.destroyAllWindows()
     pygame.quit()
+    session_result = {
+        "game": "forgotten_orchestra",
+        "completed": (
+            obj.rom_met and
+            obj.hold_met and
+            obj.reps_met
+        ),
 
-    week = REHAB_WEEKS[stage.week_idx]
-    perf = stage.perf
-    req  = week.get("unlock_req")
-    print(f"\nSession saved  ({week['label']})")
-    print(f"  Session best angle:  {int(stage.session_best_angle)}\xb0")
-    print(f"  Session best hold:   {stage.session_best_hold:.1f}s")
-    print(f"  All-time best angle: {prog['all_time_best_angle']}\xb0")
-    print(f"  Hold target now:     {prog['hold_target']:.1f}s")
-    print(f"  Trend:               {prog['trend']}")
-    if prog['rom_penalty_days'] > 0:
-        print(f"  ROM reduced for:     {prog['rom_penalty_days']} more day(s)")
-    if req:
-        gate_met = perf.check_gate(stage.week_idx)
-        print(f"  Week gate:           {'CLEARED' if gate_met else 'not yet'}")
+        "session": {
+            "week": prog["week_idx"] + 1,
+            "day": prog["day_number"],
+            "slot": chosen_slot,
+            "assessment_day": is_day7
+        },
+
+        "metrics": {
+            "rom_goal": week["max_angle"],
+            "max_angle": obj.session_max_angle,
+
+            "hold_target": obj.hold_target,
+            "hold_time": obj.session_max_hold,
+
+            "rep_target": obj.rep_target,
+            "repetitions": obj.reps,
+
+            "orchestra_progress": stage.music_progress
+        },
+
+        "objectives": {
+            "rom_met": obj.rom_met,
+            "hold_met": obj.hold_met,
+            "reps_met": obj.reps_met
+        },
+        "timestamp": datetime.now().isoformat(),
+    }
+    print("\n========== SESSION RESULT ==========")
+    print(session_result)
+    print(f"\nSession saved  ({week['label']}, Day {prog['day_number']}, {chosen_slot})")
+    print(f"  ROM reached:   {'YES' if obj.rom_met else 'no'}  (best {int(obj.session_max_angle)}\xb0 / goal {week['max_angle']}\xb0)")
+    print(f"  Hold met:      {'YES' if obj.hold_met else 'no'}  (best {obj.session_max_hold:.1f}s / target {obj.hold_target:.1f}s)")
+    print(f"  Reps met:      {'YES' if obj.reps_met else 'no'}  ({obj.reps} / {obj.rep_target})")
+    print(f"  Orchestra:     {'FULLY RESTORED' if obj.orchestra_restored else f'{int(stage.music_progress)}%'}")
+    if is_day7:
+        print("  This was a Day 7 ASSESSMENT session — week outcome is decided once "
+              "both Morning and Evening assessments are recorded.")
+    return session_result
 
 if __name__ == "__main__":
-    main()
+    result = main()
+
+    print("\nReturned Result:")
+    print(result)
+    

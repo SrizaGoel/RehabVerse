@@ -15,5 +15,33 @@
   ],
   "week": 1,
   "hold_target": 3,
-  "trend": "STEADY"
+  "trend": "STEADY",
+  "week_idx": 0,
+  "day_number": 1,
+  "last_active_date": "2026-07-07",
+  "rep_target": 5,
+  "morning_done": true,
+  "evening_done": true,
+  "today_morning_record": {
+    "rom": true,
+    "hold": true,
+    "reps": false
+  },
+  "today_evening_record": {
+    "rom": true,
+    "hold": true,
+    "reps": true
+  },
+  "day7_morning": null,
+  "day7_evening": null,
+  "streak": 0,
+  "kingdom": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "last_result": null
 }

@@ -38,5 +38,22 @@
         }
       }
     }
-  ]
+  ],
+  "paint_records": {
+    "flower": {
+      "best_time": 28.099819660186768,
+      "last_time": 28.099819660186768,
+      "times_painted": 1
+    },
+    "sun": {
+      "best_time": 12.825023889541626,
+      "last_time": 12.825023889541626,
+      "times_painted": 2
+    },
+    "butterfly": {
+      "best_time": 50.684037923812866,
+      "last_time": 50.684037923812866,
+      "times_painted": 1
+    }
+  }
 }
