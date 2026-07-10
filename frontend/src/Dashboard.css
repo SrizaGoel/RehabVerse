@@ -226,25 +226,83 @@ a {
     margin-bottom: 0;
 }
 
-.surgery-number {
+/* .surgery-header-row {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    font-size: .78rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .09em;
-    color: var(--text-light);
-    margin: 0 0 14px;
+    margin-bottom: 14px;
 }
 
-.surgery-number::before {
-    content: "";
-    width: 4px;
-    height: 14px;
-    border-radius: 20px;
-    background: linear-gradient(180deg, #14B8A6, #0F766E);
+.surgery-label {
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    text-align: right;
+} */
+
+.surgery-header-row{
+    display:flex;
+    align-items:center;      /* Vertical center */
+    justify-content:space-between;
+    width:100%;
+    margin-bottom:18px;
 }
+
+.surgery-info{
+    display:flex;
+    align-items:center;      /* Vertical center */
+    gap:14px;
+    flex:1;
+}
+
+.surgery-indicator{
+    width:8px;
+    height:32px;
+    border-radius:999px;
+    background:linear-gradient(180deg,#14B8A6,#0F766E);
+    flex-shrink:0;
+}
+
+.surgery-label{
+    font-size:.95rem;
+    font-weight:700;
+    color:var(--text-light);
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    line-height:1;           /* <-- Important */
+}
+
+.delete-path-btn{
+    width:auto !important;
+    flex:0 0 auto;
+    margin-left:auto;
+
+    border:none;
+    background:none;
+    color:#ef4444;
+    cursor:pointer;
+
+    font-size:.92rem;
+    font-weight:600;
+    line-height:1;           /* <-- Important */
+    padding:0;
+    align-self:center;       /* <-- Important */
+    position: relative;
+    top:-15px;
+    left:-5px;
+}
+
+.delete-path-btn:hover{
+    background:transparent;
+    color:#ef4444;
+}
+
+
+
+
+
 
 .session-card {
     background: #FBFDFD;

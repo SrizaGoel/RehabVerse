@@ -95,7 +95,7 @@ export default function Body({ activeRecoveries = [] }) {
     activeRecoveries.forEach(rec => {
       const parts = surgeryMap[rec.surgery]?.[rec.side];
       if (parts) {
-        const color = weekColors[Number(rec.week)] || defaultColor;
+        const color = weekColors[Number(rec.current_week)] || defaultColor;
         parts.forEach(part => {
           colors[part] = color;
         });

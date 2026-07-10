@@ -1,58 +1,33 @@
-// import './App.css'
-// import { Dashboard } from './Dashboard'
-
-// function App() {
-//   return (
-//     <>
-//       <Dashboard />
-//     </>
-//   )
-// }
-
-// export default App
-
 import { Routes, Route, Navigate } from "react-router-dom";
 
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
+import Auth from "./pages/Auth";
 import { Dashboard } from "./Dashboard";
 
 import { useAuth } from "./context/AuthContext";
+import PastSessions from "./pages/PastSessions";
 
 function App() {
-
     const { user, loading } = useAuth();
 
-    if (loading)
-        return <h2>Loading...</h2>;
+    if (loading) return <h2>Loading...</h2>;
 
+    console.log(user);
     return (
-
         <Routes>
-
-            <Route
-                path="/login"
-                element={<Login />}
-            />
-
-            <Route
-                path="/signup"
-                element={<Signup />}
-            />
-
-            <Route
-                path="/"
-                element={
-                    user
-                        ? <Dashboard />
-                        : <Navigate to="/login" />
-                }
-            />
-
+            {!user ? (
+                <>
+                    <Route path="/" element={<Auth />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </>
+            ) : (
+                <>
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/sessions" element={<PastSessions />} />
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </>
+            )}
         </Routes>
-
     );
-
 }
 
 export default App;

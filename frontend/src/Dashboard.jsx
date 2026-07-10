@@ -12,6 +12,10 @@ import league7 from './assets/league7.png';
 import league8 from './assets/league8.png';
 import league9 from './assets/league9.png';
 import league10 from './assets/league10.png';
+import { useAuth } from "./context/AuthContext";
+import { supabase } from "./lib/supabase";
+import ProfileSetup from "./pages/ProfileSetup";
+import { useNavigate } from "react-router-dom";
 
 const leagueImages = {
   1: league1,
@@ -195,32 +199,12 @@ const getSurgeryDisplayName = (key) => {
 };
 
 export function Dashboard() {
-  const [activeRecoveries, setActiveRecoveries] = useState([
-    {
-      id: '1',
-      surgery: 'aclReconstruction',
-      side: 'left',
-      week: 3,
-      morningCompleted: false,
-      morningCompletedAt: null,
-      eveningCompleted: false
-    },
-    {
-      id: '2',
-      surgery: 'meniscusRepair',
-      side: 'left',
-      week: 3,
-      morningCompleted: true,
-      morningCompletedAt: Date.now() - (60 * 60 * 1000),
-      eveningCompleted: false
-    }
-  ]);
+  const [activeRecoveries, setActiveRecoveries] = useState([]);
 
   const [selectedSurgery, setSelectedSurgery] = useState('rotatorCuffRepair');
   const [selectedSide, setSelectedSide] = useState('left');
   const [selectedWeek, setSelectedWeek] = useState(1);
 
-  const [xp, setXp] = useState(0);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [currentExercises, setCurrentExercises] = useState([]);
@@ -287,33 +271,62 @@ export function Dashboard() {
     return 10;
   };
 
-  const handleAddRecovery = () => {
+  async function handleAddRecovery() {
+
     const exists = activeRecoveries.some(
-      rec => rec.surgery === selectedSurgery && rec.side === selectedSide
+      rec =>
+        rec.surgery === selectedSurgery &&
+        rec.side === selectedSide
     );
-    if (!exists) {
-      const newRecovery = {
-        id: Date.now().toString(),
+
+    if (exists) {
+      alert("This recovery already exists!");
+      return;
+    }
+
+    // Only count exercises (games), not optional challenges
+    const exerciseCount = rehabPrograms[selectedSurgery].exercises.length;
+
+    const { error } = await supabase
+      .from("user_recoveries")
+      .insert({
+        user_id: user.id,
         surgery: selectedSurgery,
         side: selectedSide,
-        week: selectedWeek,
-        morningProgress: 0,
-        morningTotal: 3,
-        morningCompleted: false,
-        morningCompletedAt: null,
-        eveningProgress: 0,
-        eveningTotal: 3,
-        eveningCompleted: false
-      };
-      setActiveRecoveries([...activeRecoveries, newRecovery]);
-    } else {
-      alert("This recovery is already active!");
-    }
-  };
+        current_week: selectedWeek,
 
-  const handleRemoveRecovery = (id) => {
-    setActiveRecoveries(activeRecoveries.filter(rec => rec.id !== id));
-  };
+        morning_progress: 0,
+        morning_total: exerciseCount,
+        morning_completed: false,
+
+        evening_progress: 0,
+        evening_total: exerciseCount,
+        evening_completed: false
+      });
+
+    if (error) {
+      console.error(error);
+      alert(error.message);
+      return;
+    }
+
+    fetchRecoveries();
+  }
+
+  async function handleRemoveRecovery(id) {
+
+    const { error } = await supabase
+      .from("user_recoveries")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    fetchRecoveries();
+  }
 
   const openExercise = (recoveryId, sessionType, surgeryKey) => {
     const program = rehabPrograms[surgeryKey];
@@ -323,37 +336,129 @@ export function Dashboard() {
     setModalOpen(true);
   };
 
-  const handleSessionComplete = () => {
+  const handleSessionComplete = async () => {
+    console.log("Session completed!");
+    console.log(activeExerciseSession);
     if (!activeExerciseSession) return;
+
     const { recoveryId, sessionType } = activeExerciseSession;
 
+    // If recoveryId is null (e.g. Quick Start button), just close modal
+    if (!recoveryId) {
+      setModalOpen(false);
+      setActiveExerciseSession(null);
+      return;
+    }
+
+    let updates = {};
+
+    // Use actual exercises count (games only, not challenges)
+    const exerciseCount = rehabPrograms[
+      activeRecoveries.find(r => r.id === recoveryId)?.surgery
+    ]?.exercises?.length ?? 1;
+
+    if (sessionType === "morning") {
+      updates = {
+        morning_progress: exerciseCount,
+        morning_completed: true,
+        morning_completed_at: new Date().toISOString()
+      };
+    } else {
+      updates = {
+        evening_progress: exerciseCount,
+        evening_completed: true
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("user_recoveries")
+      .update(updates)
+      .eq("id", recoveryId)
+      .select();
+
+    console.log("Recovery ID:", recoveryId);
+    console.log("Returned Data:", data);
+    console.log("Error:", error);
+
+    if (error) {
+      console.error(error);
+      setModalOpen(false);
+      setActiveExerciseSession(null);
+      return;
+    }
+
+    const recovery = activeRecoveries.find(r => r.id === recoveryId);
+
+    if (recovery) {
+      const activityId =
+        sessionType === "morning"
+          ? rehabPrograms[recovery.surgery].exercises[0]
+          : rehabPrograms[recovery.surgery].challenges?.[0] ?? rehabPrograms[recovery.surgery].exercises[0];
+
+      await supabase
+        .from("sessions")
+        .insert({
+          user_id: user.id,
+          activity_id: activityId,
+          completed: true,
+          metrics: {
+            week: recovery.current_week,
+            session: sessionType
+          }
+        });
+    }
+
+    // Refresh both recoveries and user data (XP, streak, etc.)
+    await Promise.all([fetchRecoveries(), fetchUserData()]);
+    setModalOpen(false);
+    setActiveExerciseSession(null);
+  };
+  async function handleAwardXp(amount) {
+    // Fetch current XP fresh from DB to avoid stale closure issues
+    const { data: freshProgress, error: fetchError } = await supabase
+      .from("user_progress")
+      .select("xp")
+      .eq("user_id", user.id)
+      .single();
+
+    if (fetchError) {
+      console.log(fetchError);
+      return;
+    }
+
+    const newXp = (freshProgress?.xp ?? 0) + amount;
+
+    const { error } = await supabase
+      .from("user_progress")
+      .update({ xp: newXp })
+      .eq("user_id", user.id);
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    fetchUserData();
+  }
+
+  // Optimistically update local progress count when a single exercise is completed
+  // so the card shows 0/1 → 1/1 immediately without waiting for DB
+  function handleExerciseComplete() {
+    if (!activeExerciseSession?.recoveryId) return;
+    const { recoveryId, sessionType } = activeExerciseSession;
     setActiveRecoveries(prev => prev.map(rec => {
       if (rec.id !== recoveryId) return rec;
-
       if (sessionType === 'morning') {
-        return {
-          ...rec,
-          morningProgress: rec.morningTotal,
-          morningCompleted: true,
-          morningCompletedAt: Date.now()
-        };
+        return { ...rec, morning_progress: Math.min(rec.morning_progress + 1, rec.morning_total) };
       } else {
-        return {
-          ...rec,
-          eveningProgress: rec.eveningTotal,
-          eveningCompleted: true
-        };
+        return { ...rec, evening_progress: Math.min(rec.evening_progress + 1, rec.evening_total) };
       }
     }));
-  };
-
-  const handleAwardXp = (amount) => {
-    setXp(prev => prev + amount);
-  };
+  }
 
   // Cooldown & Status Computations for morning session
   const getMorningDetails = (rec) => {
-    if (rec.morningCompleted) {
+    if (rec.morning_completed) {
       return {
         badgeText: "Completed",
         badgeClass: "badge completed",
@@ -372,7 +477,7 @@ export function Dashboard() {
   };
 
   const getEveningDetails = (rec) => {
-    if (rec.eveningCompleted) {
+    if (rec.evening_completed) {
       return {
         badgeText: "Completed",
         badgeClass: "badge completed",
@@ -382,7 +487,7 @@ export function Dashboard() {
       };
     }
 
-    if (!rec.morningCompleted) {
+    if (!rec.morning_completed) {
       return {
         badgeText: "Locked",
         badgeClass: "badge locked",
@@ -393,7 +498,7 @@ export function Dashboard() {
       };
     }
 
-    const elapsed = currentTime.getTime() - new Date(rec.morningCompletedAt).getTime();
+    const elapsed = currentTime.getTime() - new Date(rec.morning_completed_at).getTime();
     const cooldown = 2 * 60 * 60 * 1000;
     if (elapsed < cooldown) {
       const remainingMs = cooldown - elapsed;
@@ -416,16 +521,112 @@ export function Dashboard() {
     };
   };
 
-  const totalExercises = activeRecoveries.reduce((sum, rec) => sum + rec.morningTotal + rec.eveningTotal, 0);
-  const completedExercises = activeRecoveries.reduce((sum, rec) => sum + rec.morningProgress + rec.eveningProgress, 0);
+  const totalExercises = activeRecoveries.reduce((sum, rec) => sum + rec.morning_total + rec.evening_total, 0);
+  const completedExercises = activeRecoveries.reduce((sum, rec) => sum + rec.morning_progress + rec.evening_progress, 0);
   const progressPercent = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
 
   const recoveryStatusText = activeRecoveries
     .map(r => `${getSurgeryDisplayName(r.surgery)} (${r.side === 'left' ? 'L' : 'R'})`)
     .join(', ') || 'No active recoveries';
 
+  const { user } = useAuth();
+  const [profile, setProfile] = useState(null);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [progress, setProgress] = useState(null);
+  async function fetchProfile() {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    console.log(data);
+    console.log(error);
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    setProfile(data);
+
+    if (!data || !data.full_name) {
+      setShowProfileSetup(true);
+    }
+  }
+  async function fetchUserData() {
+
+    // Profile
+    const { data: profileData, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (!profileError)
+      setProfile(profileData);
+
+    // Progress
+    const { data: progressData, error: progressError } = await supabase
+      .from("user_progress")
+      .select("*")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!progressError)
+      setProgress(progressData);
+
+  }
+  async function fetchRecoveries() {
+
+    const { data, error } = await supabase
+      .from("user_recoveries")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setActiveRecoveries(data);
+  }
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+  useEffect(() => {
+
+    if (!user) return;
+
+    fetchUserData();
+    fetchRecoveries();
+
+  }, [user]);
+
+  const currentXp = progress?.xp ?? 0;
+  const currentWeek = progress?.current_week ?? 1;
+  const currentDay = progress?.current_day ?? 1;
+  const currentStreak = progress?.current_streak ?? 0;
+  const morningCompleted = progress?.morning_completed ?? false;
+  const eveningCompleted = progress?.evening_completed ?? false;
+  const navigate = useNavigate();
   return (
     <>
+      {showProfileSetup && (
+
+        <ProfileSetup
+
+          onComplete={() => {
+            setShowProfileSetup(false);
+            fetchProfile();
+          }}
+
+        />
+
+      )}
       <nav className="navbar">
         <div className="logo">RehabVerse</div>
         <ul className="nav-links">
@@ -440,7 +641,17 @@ export function Dashboard() {
             </a>
           </li>
         </ul>
-        <div className="profile">SG</div>
+        <div className="profile">
+          {
+            profile?.full_name
+              ? profile.full_name
+                .split(" ")
+                .map(word => word[0])
+                .join("")
+                .toUpperCase()
+              : user?.email[0].toUpperCase()
+          }
+        </div>
       </nav>
 
       <main className="dashboard">
@@ -471,29 +682,29 @@ export function Dashboard() {
             activeRecoveries.map((rec) => {
               const morningDetails = getMorningDetails(rec);
               const eveningDetails = getEveningDetails(rec);
-              const morningWidth = `${(rec.morningProgress / rec.morningTotal) * 100}%`;
-              const eveningWidth = `${(rec.eveningProgress / rec.eveningTotal) * 100}%`;
+              const morningWidth = `${(rec.morning_progress / rec.morning_total) * 100}%`;
+              const eveningWidth = `${(rec.evening_progress / rec.evening_total) * 100}%`;
 
               return (
                 <div className="surgery" key={rec.id} style={{ marginBottom: '28px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <p className="surgery-number">
-                      {getSurgeryDisplayName(rec.surgery)} ({rec.side.toUpperCase()}) - Week {rec.week}
-                    </p>
-                    <button
-                      onClick={() => handleRemoveRecovery(rec.id)}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        fontWeight: '600'
-                      }}
-                    >
-                      Delete Path
-                    </button>
-                  </div>
+<div className="surgery-header-row">
+  <div className="surgery-info">
+    <span className="surgery-indicator"></span>
+
+    <span className="surgery-label">
+      {`${getSurgeryDisplayName(rec.surgery)} • ${
+        rec.side.charAt(0).toUpperCase() + rec.side.slice(1)
+      } Side • Week ${rec.current_week}`}
+    </span>
+  </div>
+
+  <button
+    className="delete-path-btn"
+    onClick={() => handleRemoveRecovery(rec.id)}
+  >
+    Delete Path
+  </button>
+</div>
                   <div className="session-grid">
                     {/* Morning Session */}
                     <div className={morningDetails.cardClass}>
@@ -504,7 +715,7 @@ export function Dashboard() {
                         </div>
                         <span className={morningDetails.badgeClass}>{morningDetails.badgeText}</span>
                       </div>
-                      <div className="progress-info">{rec.morningProgress} / {rec.morningTotal} Exercises</div>
+                      <div className="progress-info">{rec.morning_progress} / {rec.morning_total} Exercises</div>
                       <div className="progress-bar">
                         <div className="progress-fill morning-fill" style={{ width: morningWidth }}></div>
                       </div>
@@ -526,7 +737,7 @@ export function Dashboard() {
                         </div>
                         <span className={eveningDetails.badgeClass}>{eveningDetails.badgeText}</span>
                       </div>
-                      <div className="progress-info">{rec.eveningProgress} / {rec.eveningTotal} Exercises</div>
+                      <div className="progress-info">{rec.evening_progress} / {rec.evening_total} Exercises</div>
                       <div className="progress-bar">
                         <div className="progress-fill evening-fill" style={{ width: eveningWidth }}></div>
                       </div>
@@ -560,8 +771,8 @@ export function Dashboard() {
           </div>
         </section>
 
-        <button className="hero-card-past" onClick={() => alert("Past sessions archive coming soon!")}>
-          View Past Sessions 
+        <button className="hero-card-past" onClick={() => navigate("/sessions")}>
+          View Past Sessions
         </button>
 
         <section id="progress-part">
@@ -572,11 +783,11 @@ export function Dashboard() {
               <div className="top-row">
                 <div className="middle-progress-section">
                   <div className="xp">
-                    Total XP : {xp}
+                    Total XP : {currentXp}
                   </div>
                   <div className="league">
                     <img
-                      src={leagueImages[getLeague(xp)]}
+                      src={leagueImages[getLeague(currentXp)]}
                       className="league-img"
                       alt="League Badge"
                     />
@@ -645,7 +856,7 @@ export function Dashboard() {
                 <div className="week-legend">
                   <div className="week-item">
                     <span className="color week1"></span>
-                    <p>Week 1</p>
+                    <p>Week {currentWeek}</p>
                   </div>
                   <div className="week-item">
                     <span className="color week2"></span>
@@ -693,13 +904,10 @@ export function Dashboard() {
         onClose={() => setModalOpen(false)}
         exercises={currentExercises}
         challenges={currentChallenges}
-        onComplete={handleComplete}
+        onComplete={handleSessionComplete}
         onAwardXp={handleAwardXp}
+        onExerciseComplete={handleExerciseComplete}
       />
     </>
   );
-
-  function handleComplete() {
-    handleSessionComplete();
-  }
 }

@@ -195,7 +195,7 @@ const TAB_LABELS = {
   tips: 'Success Tips'
 };
 
-export default function ExerciseModal({ isOpen, onClose, exercises, challenges, onComplete, onAwardXp }) {
+export default function ExerciseModal({ isOpen, onClose, exercises, challenges, onComplete, onAwardXp, onExerciseComplete }) {
   const [view, setView] = useState('list'); // 'list' | 'detail'
   const [activeItem, setActiveItem] = useState(null);
   const [activeTab, setActiveTab] = useState('goal');
@@ -227,16 +227,30 @@ export default function ExerciseModal({ isOpen, onClose, exercises, challenges, 
   const backToList = () => setView('list');
 
   const markComplete = (item) => {
+    let newCompletedIds = completedIds;
+
     if (!completedIds.includes(item.id)) {
       onAwardXp?.(item.isChallenge ? 25 : 10);
-      setCompletedIds(prev => [...prev, item.id]);
+      if (!item.isChallenge) {
+        onExerciseComplete?.();
+      }
+      newCompletedIds = [...completedIds, item.id];
+      setCompletedIds(newCompletedIds);
     }
-    setView('list');
+
+    // Auto-complete session the moment all exercises are done
+    const allDone = exerciseList.length > 0 &&
+      exerciseList.every(ex => newCompletedIds.includes(ex.id));
+
+    if (allDone) {
+      onComplete?.(); // triggers handleSessionComplete → closes modal + saves to DB
+    } else {
+      setView('list');
+    }
   };
 
   const finishSession = () => {
     onComplete?.();
-    onClose();
   };
   const launchGame = async (item) => {
 
@@ -309,15 +323,14 @@ export default function ExerciseModal({ isOpen, onClose, exercises, challenges, 
               </div>
             )}
 
-            <button
-              className="finish-session-btn"
-              disabled={!allExercisesDone}
-              onClick={finishSession}
-            >
-              {allExercisesDone
-                ? 'Finish Session'
-                : `Complete all exercises to finish (${completedExerciseCount}/${exerciseList.length})`}
-            </button>
+            {/* Progress status — auto-completes when all done, no button needed */}
+            {!allExercisesDone && (
+              <div className="session-progress-status">
+                <i className="fa-solid fa-circle-info"></i>
+                Complete all exercises to finish &nbsp;
+                <strong>({completedExerciseCount}/{exerciseList.length})</strong>
+              </div>
+            )}
           </div>
         )}
 
