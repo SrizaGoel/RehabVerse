@@ -3,7 +3,17 @@
   "paint_records": {
     "butterfly": {
       "best_time": 19.782029628753662,
-      "last_time": 19.782029628753662,
+      "last_time": 23.509336471557617,
+      "times_painted": 2
+    },
+    "sun": {
+      "best_time": 21.97408938407898,
+      "last_time": 21.97408938407898,
+      "times_painted": 2
+    },
+    "flower": {
+      "best_time": 22.732236623764038,
+      "last_time": 22.732236623764038,
       "times_painted": 1
     }
   }
