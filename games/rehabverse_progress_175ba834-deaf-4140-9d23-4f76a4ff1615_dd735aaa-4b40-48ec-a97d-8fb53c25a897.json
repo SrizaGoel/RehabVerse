@@ -1,0 +1,27 @@
+{
+  "week_idx": 0,
+  "day_number": 1,
+  "last_active_date": "2026-07-11",
+  "hold_target": 5.0,
+  "rep_target": 5,
+  "morning_done": true,
+  "evening_done": false,
+  "today_morning_record": {
+    "rom": true,
+    "hold": true,
+    "reps": false
+  },
+  "today_evening_record": null,
+  "day7_morning": null,
+  "day7_evening": null,
+  "streak": 0,
+  "kingdom": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "last_result": null
+}

@@ -230,9 +230,21 @@ def draw_target_stick_figure(img, center_x, center_y, offsets, active_pose_name)
 # ──────────────────────────────────────────────
 # MAIN EXECUTION LOOP
 # ──────────────────────────────────────────────
-def main():
+def main(params=None):
     print("RehabVerse — Belle Pose Starting...")
     
+    import copy
+    POSES_local = copy.deepcopy(POSES)
+    side = params.get("side", "L") if params else "L"
+    if side == "R":
+        for pose in POSES_local:
+            if pose["name"] == "Third Position":
+                targets = pose["targets"]
+                targets["l_shoulder"], targets["r_shoulder"] = targets.get("r_shoulder", 85.0), targets.get("l_shoulder", 135.0)
+                targets["l_elbow"], targets["r_elbow"] = targets.get("r_elbow", 160.0), targets.get("l_elbow", 130.0)
+                pose["targets"] = targets
+    POSES = POSES_local
+
     mp_pose = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
     
@@ -394,8 +406,13 @@ def main():
                     # All poses done — session complete!
                     session_complete = True
                     session_complete_time = curr_time
-                    # Save to rehab_progress.json
-                    progress_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rehab_progress.json")
+                    if params and params.get("user_id") and params.get("recovery_id"):
+                        import re
+                        uid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["user_id"]))
+                        rid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["recovery_id"]))
+                        progress_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"rehab_progress_{uid}_{rid}.json")
+                    else:
+                        progress_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rehab_progress.json")
                     try:
                         with open(progress_path, "r") as f:
                             progress = json.load(f)
@@ -408,7 +425,7 @@ def main():
                     })
                     with open(progress_path, "w") as f:
                         json.dump(progress, f, indent=2)
-                    print("Session scores saved to rehab_progress.json")
+                    print(f"Session scores saved to {os.path.basename(progress_path)}")
                 else:
                     # Advance to next pose
                     current_pose_idx = next_idx
@@ -686,6 +703,36 @@ def main():
     cv2.destroyAllWindows()
     pygame.quit()
     print("Session ended.")
+
+    # Build structured session result
+    total_sim = sum(v.get("similarity", 0) for v in session_scores.values())
+    total_sta = sum(v.get("stability", 0) for v in session_scores.values())
+    n = max(1, len(session_scores))
+    avg_sim = round(total_sim / n, 1)
+    avg_sta = round(total_sta / n, 1)
+    overall = round((avg_sim + avg_sta) / 2, 1)
+
+    session_result = {
+        "session": {
+            "name": "belle_pose",
+            "completed": session_complete,
+            "slot": params.get("session_type", "morning") if params else "morning",
+            "week": params.get("current_week", 1) if params else 1
+        },
+        "metrics": {
+            "avg_similarity": avg_sim,
+            "avg_stability": avg_sta,
+            "overall_score": overall,
+            "poses_completed": len(session_scores),
+            "total_poses": len(POSES)
+        },
+        "objectives": {
+            "completed": session_complete,
+            "all_poses_done": session_complete
+        },
+        "pose_scores": session_scores
+    }
+    return session_result
 
 if __name__ == "__main__":
     main()

@@ -262,30 +262,34 @@ def calc_angle(a, b, c):
     return 360 - angle if angle > 180 else angle
 
 
-def get_arm_angle(landmarks):
+def get_arm_angle(landmarks, side='L'):
     """
     Shoulder ABDUCTION - arm raised out to the side.
-    right_shoulder->left_shoulder->left_elbow angle.
-    ~0 at rest, growing toward ~180 at full raise. Uses LEFT arm.
+    right_shoulder->left_shoulder->left_elbow angle (or mirrored for Right).
     """
     lm   = landmarks
     Pose = mp.solutions.pose.PoseLandmark
 
-    l_shoulder = [lm[Pose.LEFT_SHOULDER.value].x,  lm[Pose.LEFT_SHOULDER.value].y]
-    l_elbow    = [lm[Pose.LEFT_ELBOW.value].x,     lm[Pose.LEFT_ELBOW.value].y]
-    r_shoulder = [lm[Pose.RIGHT_SHOULDER.value].x, lm[Pose.RIGHT_SHOULDER.value].y]
+    if side == 'R':
+        r_shoulder = [lm[Pose.RIGHT_SHOULDER.value].x, lm[Pose.RIGHT_SHOULDER.value].y]
+        r_elbow    = [lm[Pose.RIGHT_ELBOW.value].x,    lm[Pose.RIGHT_ELBOW.value].y]
+        l_shoulder = [lm[Pose.LEFT_SHOULDER.value].x,  lm[Pose.LEFT_SHOULDER.value].y]
+        return calc_angle(l_shoulder, r_shoulder, r_elbow)
+    else:
+        l_shoulder = [lm[Pose.LEFT_SHOULDER.value].x,  lm[Pose.LEFT_SHOULDER.value].y]
+        l_elbow    = [lm[Pose.LEFT_ELBOW.value].x,     lm[Pose.LEFT_ELBOW.value].y]
+        r_shoulder = [lm[Pose.RIGHT_SHOULDER.value].x, lm[Pose.RIGHT_SHOULDER.value].y]
+        return calc_angle(r_shoulder, l_shoulder, l_elbow)
 
-    return calc_angle(r_shoulder, l_shoulder, l_elbow)
 
-
-def get_wrist_normalized(landmarks):
-    """Return (x, y) of left wrist, normalised 0-1.
+def get_wrist_normalized(landmarks, side='L'):
+    """Return (x, y) of wrist, normalised 0-1.
     Note: MediaPipe y=0 is TOP of frame, y=1 is BOTTOM.
     We flip Y so y=0 means bottom of canvas (arm low) and y=1 means top.
     """
     lm   = landmarks
     Pose = mp.solutions.pose.PoseLandmark
-    w    = lm[Pose.LEFT_WRIST.value]
+    w    = lm[Pose.RIGHT_WRIST.value] if side == 'R' else lm[Pose.LEFT_WRIST.value]
     raw_x = float(w.x)
     raw_y = float(w.y)
     flipped_y = 1.0 - raw_y
@@ -395,11 +399,19 @@ def draw_paint_hud(frame, canvas: PaintCanvas, angle, is_holding, progress, comp
                 cv2.FONT_HERSHEY_SIMPLEX, 0.38, (70,65,85), 1)
 
 
-def main():
+def main(params=None):
     import mediapipe as mp
-    global mp_pose, mp_drawing
+    global mp_pose, mp_drawing, PROGRESS_FILE
     mp_pose    = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
+
+    if params and params.get("user_id") and params.get("recovery_id"):
+        import re
+        uid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["user_id"]))
+        rid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["recovery_id"]))
+        PROGRESS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"rehab_progress_{uid}_{rid}.json")
+    else:
+        PROGRESS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rehab_progress.json")
 
     print("RehabVerse — Paint the Object")
     print("Q to quit.")
@@ -447,11 +459,12 @@ def main():
             wrist_norm = (0.5, 0.5)
 
             if results.pose_landmarks:
+                side = params.get("side", "L") if params else "L"
                 lm         = results.pose_landmarks.landmark
-                raw        = get_arm_angle(lm)
+                raw        = get_arm_angle(lm, side)
                 smoothed_angle = 0.82 * smoothed_angle + 0.18 * raw
                 angle      = smoothed_angle
-                wrist_norm = get_wrist_normalized(lm)
+                wrist_norm = get_wrist_normalized(lm, side)
 
                 mp_drawing.draw_landmarks(
                     frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
@@ -534,6 +547,31 @@ def main():
             print(f"  Time: {elapsed:.1f}s (best on {template_name}: {rec['best_time']:.1f}s)")
     else:
         print("  Paint challenge not yet unlocked.")
+
+    elapsed_time = None
+    if completion_info is not None:
+        elapsed_time, _, _ = completion_info
+
+    session_result = {
+        "session": {
+            "name": "paint_the_object",
+            "template": template_name,
+            "completed": completion_recorded,
+            "slot": params.get("session_type", "morning") if params else "morning",
+            "week": params.get("current_week", 1) if params else 1
+        },
+        "metrics": {
+            "time_taken": elapsed_time,
+            "accuracy": paint_canvas.accuracy if completion_recorded else 0.0,
+            "completion_pct": paint_canvas.completion_pct(),
+            "side_hold": progress["side_hold"]
+        },
+        "objectives": {
+            "unlocked": is_unlocked(),
+            "completed": completion_recorded
+        }
+    }
+    return session_result
 
 
 def is_unlocked_check():

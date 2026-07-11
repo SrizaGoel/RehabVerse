@@ -687,12 +687,17 @@ def calc_angle(a, b, c):
         math.atan2(c[1]-b[1],c[0]-b[0]) - math.atan2(a[1]-b[1],a[0]-b[0])))
     return 360-angle if angle>180 else angle
 
-def get_abduction_angle(landmarks):
+def get_abduction_angle(landmarks, side='L'):
     lm   = landmarks
     Pose = mp.solutions.pose.PoseLandmark
-    hip      = [lm[Pose.LEFT_HIP.value].x,      lm[Pose.LEFT_HIP.value].y]
-    shoulder = [lm[Pose.LEFT_SHOULDER.value].x,  lm[Pose.LEFT_SHOULDER.value].y]
-    elbow    = [lm[Pose.LEFT_ELBOW.value].x,     lm[Pose.LEFT_ELBOW.value].y]
+    if side == 'R':
+        hip      = [lm[Pose.RIGHT_HIP.value].x,      lm[Pose.RIGHT_HIP.value].y]
+        shoulder = [lm[Pose.RIGHT_SHOULDER.value].x,  lm[Pose.RIGHT_SHOULDER.value].y]
+        elbow    = [lm[Pose.RIGHT_ELBOW.value].x,     lm[Pose.RIGHT_ELBOW.value].y]
+    else:
+        hip      = [lm[Pose.LEFT_HIP.value].x,      lm[Pose.LEFT_HIP.value].y]
+        shoulder = [lm[Pose.LEFT_SHOULDER.value].x,  lm[Pose.LEFT_SHOULDER.value].y]
+        elbow    = [lm[Pose.LEFT_ELBOW.value].x,     lm[Pose.LEFT_ELBOW.value].y]
     return calc_angle(hip, shoulder, elbow)
 
 def draw_conductor_arc(frame, angle, cx, cy, week_max, theme_col):
@@ -807,9 +812,18 @@ def draw_hud(frame, angle, stage, prog, slot, is_day7):
 # ──────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────
-def main():
+def main(params=None):
     print("RehabVerse — The Forgotten Orchestra  (v4)")
     print("  Fixed weekly ROM + adaptive hold/reps + two sessions/day + Day 7 assessment\n")
+
+    global DATA_FILE
+    if params and params.get("user_id") and params.get("recovery_id"):
+        import re
+        uid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["user_id"]))
+        rid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["recovery_id"]))
+        DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"rehabverse_progress_{uid}_{rid}.json")
+    else:
+        DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rehabverse_progress.json")
 
     prog = load_progress()
     advance_day_if_needed(prog)
@@ -826,7 +840,7 @@ def main():
     else:   bg_frame = np.zeros((H,W,3),dtype=np.uint8)
 
     # ── Day briefing screen ──
-    chosen_slot = default_session_slot()
+    chosen_slot = params.get("session_type") if params and params.get("session_type") else default_session_slot()
     in_briefing = True
     while in_briefing:
         frame = bg_frame.copy()
@@ -869,11 +883,14 @@ def main():
             angle = smoothed_angle
             if results.pose_landmarks:
                 lm             = results.pose_landmarks.landmark
-                raw            = get_abduction_angle(lm)
+                side = params.get("side", "L") if params else "L"
+                raw            = get_abduction_angle(lm, side)
                 smoothed_angle = 0.82*smoothed_angle + 0.18*raw
                 angle          = smoothed_angle
 
-                ls = lm[mp_pose_.PoseLandmark.LEFT_SHOULDER.value]
+                sh_landmark = (mp_pose_.PoseLandmark.RIGHT_SHOULDER.value if side == 'R'
+                               else mp_pose_.PoseLandmark.LEFT_SHOULDER.value)
+                ls = lm[sh_landmark]
                 draw_conductor_arc(frame, angle,
                                    int(ls.x*W), int(ls.y*H),
                                    week["max_angle"],

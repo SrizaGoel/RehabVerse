@@ -1988,7 +1988,16 @@ def draw_session_end(frame, fish_caught, fish_needed, week, day,
 # ════════════════════════════════════════════════════════════
 #  MAIN
 # ════════════════════════════════════════════════════════════
-def main():
+def main(params=None):
+    global DATA_FILE
+    if params and params.get("user_id") and params.get("recovery_id"):
+        import re
+        uid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["user_id"]))
+        rid = re.sub(r'[^a-zA-Z0-9_-]', '', str(params["recovery_id"]))
+        DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"rehabverse_progress_{uid}_{rid}.json")
+    else:
+        DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rehabverse_progress_fishing.json")
+
     progress = load_progress()
     week, day, target_angle, hold_t = get_today_config(progress)
     adapted = progress.get("adaptive_hold") is not None
@@ -2056,6 +2065,7 @@ def main():
     hold_accum  = 0.0
     hold_prog   = 0.0
     catch_stabilities = []
+    avg_stability = 100.0   # default; updated after every catch
     smoother    = AngleSmoother(alpha=0.14)   # was 0.2 — heavier smoothing = less jitter
     stability   = StabilityTracker()
     stab_score  = 100.0
@@ -2091,9 +2101,12 @@ def main():
         if res.pose_landmarks:
             lm = res.pose_landmarks.landmark
 
-            lw = lm[mp_pose.PoseLandmark.LEFT_WRIST.value]
-            rw = lm[mp_pose.PoseLandmark.RIGHT_WRIST.value]
-            side = 'L' if lw.y < rw.y else 'R'
+            if params and params.get("side"):
+                side = params["side"]
+            else:
+                lw = lm[mp_pose.PoseLandmark.LEFT_WRIST.value]
+                rw = lm[mp_pose.PoseLandmark.RIGHT_WRIST.value]
+                side = 'L' if lw.y < rw.y else 'R'
             active_side = side
 
             raw_angle = elbow_angle(lm, side, W, H)
@@ -2215,6 +2228,29 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+
+    session_result = {
+        "session": {
+            "week": progress.get("week", week),
+            "day": progress.get("day", day),
+            "slot": params.get("session_type", "morning") if params else "morning",
+        },
+        "metrics": {
+            "rom_goal": target_angle,
+            "max_angle": target_angle,
+            "hold_target": hold_t,
+            "hold_time": hold_accum,
+            "repetitions": fish_caught,
+            "rep_target": FISH_NEEDED,
+            "stability": avg_stability
+        },
+        "objectives": {
+            "rom_met": fish_caught >= FISH_NEEDED,
+            "hold_met": fish_caught >= FISH_NEEDED,
+            "reps_met": fish_caught >= FISH_NEEDED
+        }
+    }
+    return session_result
 
 if __name__ == "__main__":
     main()
