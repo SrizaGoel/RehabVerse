@@ -3,36 +3,52 @@ import './ExerciseModal.css';
 
 const EXERCISE_DATA = {
   forgotten_orchestra: {
-    title: "Side Arm Raise",
-    objective: "Improve shoulder abduction through controlled movement while maintaining correct posture throughout the exercise.",
+    title: "The Forgotten Orchestra",
+    objective: "Restore a forgotten orchestra by performing controlled shoulder abduction exercises. Unlock new instruments by reaching your rehabilitation goals.",
     primaryMuscle: "Middle Deltoid",
     movement: "Shoulder Abduction",
-    target: "Reach the rehabilitation target ROM safely.",
+    target: "Reach the required range of motion, hold the position, and complete all repetitions to fully restore today's orchestra.",
+
     instructions: [
-      "Stand upright facing the camera.",
-      "Keep your feet shoulder-width apart.",
-      "Raise your surgery arm sideways.",
-      "Reach the highlighted target angle.",
-      "Hold the position until instructed.",
-      "Lower the arm slowly.",
-      "Repeat until all repetitions are completed."
+      "Stand facing the camera with your full upper body visible.",
+      "Keep your feet shoulder-width apart and maintain an upright posture.",
+      "Slowly raise your surgery arm sideways toward the target angle.",
+      "Hold the arm steady until the hold timer is completed.",
+      "Lower your arm in a controlled motion to finish one repetition.",
+      "Repeat until all required repetitions are completed.",
+      "Unlock instruments and restore the orchestra by completing every objective."
     ],
+
     metrics: [
-      { name: "Range of Motion", description: "Highest shoulder angle achieved." },
-      { name: "Target Angle", description: "Required ROM for current stage." },
-      { name: "Hold Time", description: "Successful hold duration." },
-      { name: "Repetitions", description: "Total successful repetitions." }
+      {
+        name: "Range of Motion",
+        description: "Highest shoulder abduction angle achieved during the session."
+      },
+      {
+        name: "Hold Time",
+        description: "Longest successful hold at the target angle."
+      },
+      {
+        name: "Repetitions",
+        description: "Number of correctly completed arm raises."
+      },
+      {
+        name: "Orchestra Progress",
+        description: "Percentage of instruments restored in the current session."
+      }
     ],
+
     tips: [
-      "Remain standing throughout the exercise.",
-      "Keep your full upper body visible.",
-      "Move slowly and avoid momentum.",
-      "Do not shrug your shoulders.",
-      "Maintain an upright posture.",
-      "Breathe normally.",
-      "Stop immediately if sharp pain occurs."
+      "Move slowly and avoid using momentum.",
+      "Keep your shoulders relaxed—do not shrug.",
+      "Maintain an upright posture throughout the movement.",
+      "Hold the target position steadily instead of rushing.",
+      "Breathe normally during each repetition.",
+      "Ensure your full upper body remains visible to the camera.",
+      "Stop immediately if you experience sharp pain."
     ],
-    note: "Progress depends on completing rehabilitation goals rather than calendar weeks."
+
+    note: "Each session starts with a silent orchestra. Completing the Range of Motion, Hold Time, and Repetition goals unlocks instruments until the orchestra is fully restored. Weekly progress is based on rehabilitation milestones, not calendar dates."
   },
   front_arm_raise: {
     title: "Front Arm Raise",
@@ -67,28 +83,47 @@ const EXERCISE_DATA = {
   },
   fishing: {
     title: "Fishing Cast",
-    objective: "Improve elbow flexion and extension through a controlled, functional casting motion.",
-    primaryMuscle: "Biceps Brachii / Triceps Brachii",
-    movement: "Elbow Flexion & Extension",
-    target: "Reach the rehabilitation target ROM safely.",
+    objective: "Improve elbow flexion through controlled movement, steady holds, and functional reaching while catching fish.",
+    primaryMuscle: "Biceps Brachii / Brachialis",
+    movement: "Elbow Flexion",
+    target: "Reach and maintain the rehabilitation target angle to catch fish.",
     instructions: [
       "Sit or stand facing the camera.",
       "Keep your upper arm close to your body.",
-      "Bend your elbow slowly toward the target angle.",
-      "Extend your elbow back out with control.",
-      "Repeat until all repetitions are completed."
+      "Slowly bend your elbow until you reach the target angle.",
+      "Hold the position steadily until the fish is caught.",
+      "Relax and repeat until all fish are collected."
     ],
     metrics: [
-      { name: "Range of Motion", description: "Highest elbow flexion angle achieved." },
-      { name: "Target Angle", description: "Required ROM for current stage." },
-      { name: "Repetitions", description: "Total successful repetitions." }
+      {
+        name: "Range of Motion",
+        description: "Maximum elbow flexion angle achieved during the session."
+      },
+      {
+        name: "Target Angle",
+        description: "Required elbow flexion angle for the current rehabilitation stage."
+      },
+      {
+        name: "Hold Duration",
+        description: "Time the target angle is maintained to successfully catch a fish."
+      },
+      {
+        name: "Stability",
+        description: "Measures how steady the arm remains during the hold based on angle variation."
+      },
+      {
+        name: "Fish Collected",
+        description: "Number of successful catches completed during the rehabilitation session."
+      }
     ],
     tips: [
-      "Keep your upper arm still and close to your torso.",
-      "Move slowly and avoid swinging.",
-      "Stop immediately if sharp pain occurs."
+      "Keep your upper arm close to your torso throughout the movement.",
+      "Reach the target angle before beginning the hold.",
+      "Maintain a steady position to improve stability.",
+      "Avoid sudden or jerky movements.",
+      "Stop immediately if you experience sharp pain."
     ],
-    note: "Progress depends on completing rehabilitation goals rather than calendar weeks."
+    note: "Exercise difficulty adapts to the patient's performance. Hold duration may be reduced after weaker sessions and restored as performance improves."
   },
   leg_raise: {
     title: "Leg Raise",
@@ -118,74 +153,88 @@ const EXERCISE_DATA = {
   },
   paint_the_object: {
     title: "Paint the Object",
-    objective: "A fun optional challenge that encourages fluid, controlled shoulder movement by tracing shapes in the air.",
+    objective: "Improve shoulder abduction and static control by painting objects through steady arm positioning.",
     primaryMuscle: "Middle Deltoid",
-    movement: "Shoulder Circumduction",
-    target: "Trace the highlighted shape smoothly and accurately.",
+    movement: "Shoulder Abduction",
+    target: "Raise and hold your arm to paint the entire object accurately.",
     instructions: [
-      "Stand upright facing the camera.",
-      "Keep your surgery arm visible at all times.",
-      "Trace the outline of the shown object with your arm.",
-      "Move smoothly, avoiding sudden jerks.",
-      "Complete the shape to finish the challenge."
+      "Stand facing the camera with your full upper body visible.",
+      "Raise your surgery arm to control the paint brush.",
+      "Move your wrist to guide the brush over the object.",
+      "Hold your arm above the target angle to paint.",
+      "Fill at least 85% of the object to complete the challenge."
     ],
     metrics: [
-      { name: "Path Accuracy", description: "How closely you traced the shape." },
-      { name: "Completion Time", description: "Time taken to complete the trace." }
+      {
+        name: "Completion Percentage",
+        description: "Percentage of the object successfully painted."
+      },
+      {
+        name: "Painting Accuracy",
+        description: "Measures how accurately painting stays within the object boundaries."
+      },
+      {
+        name: "Completion Time",
+        description: "Time taken to finish the painting after the challenge unlocks."
+      },
+      {
+        name: "Side Hold Progress",
+        description: "Cumulative shoulder hold time used to unlock the painting challenge."
+      }
     ],
     tips: [
-      "Move slowly and stay relaxed.",
-      "Keep your full upper body visible.",
-      "Stop immediately if sharp pain occurs."
+      "Keep your movements smooth and controlled.",
+      "Maintain your arm above the target angle while painting.",
+      "Avoid painting outside the object boundaries.",
+      "Keep your entire upper body visible to the camera.",
+      "Stop immediately if you experience sharp pain."
     ],
-    note: "Optional challenge — completing it is not required to finish today's session."
+    note: "This optional challenge unlocks after accumulating 60 seconds of successful side-arm holds. Your best completion time is saved for each painting template."
   },
   belle_pose: {
     title: "Belle Pose",
-    objective: "An optional challenge that rewards holding a stable, controlled shoulder position.",
+    objective: "Improve shoulder mobility, posture, and upper-limb control by matching and holding a series of ballet-inspired poses.",
     primaryMuscle: "Middle Deltoid / Rotator Cuff",
-    movement: "Shoulder Abduction Hold",
-    target: "Hold the pose steady for the required duration.",
+    movement: "Shoulder Abduction & Multi-Joint Static Hold",
+    target: "Match each target pose accurately and maintain it steadily for the required duration.",
     instructions: [
-      "Stand upright facing the camera.",
-      "Raise your surgery arm to the highlighted pose.",
-      "Hold the position as steady as possible.",
-      "Maintain the hold for the required duration."
+      "Stand facing the camera with your full upper body visible.",
+      "Copy the highlighted target pose.",
+      "Adjust your shoulder and elbow positions until they match the guide.",
+      "Hold the pose steadily for 3 seconds.",
+      "Complete all four poses to finish the challenge."
     ],
     metrics: [
-      { name: "Hold Stability", description: "How steady the pose was maintained." },
-      { name: "Hold Time", description: "Successful hold duration." }
+      {
+        name: "Pose Similarity",
+        description: "Measures how closely your shoulder and elbow angles match the target pose."
+      },
+      {
+        name: "Pose Stability",
+        description: "Evaluates how steadily the pose is maintained during the hold."
+      },
+      {
+        name: "Hold Duration",
+        description: "Time the pose is continuously maintained before completion."
+      },
+      {
+        name: "Poses Completed",
+        description: "Number of ballet poses successfully completed during the session."
+      },
+      {
+        name: "Overall Score",
+        description: "Combined performance score based on average pose similarity and stability."
+      }
     ],
     tips: [
-      "Engage your core for extra stability.",
-      "Breathe normally throughout the hold.",
-      "Stop immediately if sharp pain occurs."
+      "Keep your shoulders relaxed throughout the movement.",
+      "Match the target pose before beginning the hold.",
+      "Avoid unnecessary body movement while holding the pose.",
+      "Breathe normally and maintain good posture.",
+      "Stop immediately if you experience sharp pain."
     ],
-    note: "Optional challenge — completing it is not required to finish today's session."
+    note: "Complete all four ballet-inspired poses successfully to finish the optional challenge. Individual pose scores and overall performance are recorded for progress tracking."
   },
-  step_stones: {
-    title: "Step Stones",
-    objective: "An optional challenge that builds knee control and balance through guided stepping.",
-    primaryMuscle: "Quadriceps / Hamstrings",
-    movement: "Knee Flexion & Extension",
-    target: "Step onto each highlighted stone with control.",
-    instructions: [
-      "Stand facing the camera with enough space to step.",
-      "Step onto each highlighted stone in sequence.",
-      "Keep your movements slow and controlled.",
-      "Complete the full sequence to finish the challenge."
-    ],
-    metrics: [
-      { name: "Step Accuracy", description: "How accurately each stone was reached." },
-      { name: "Completion Time", description: "Time taken to complete the sequence." }
-    ],
-    tips: [
-      "Hold onto a stable surface if needed for balance.",
-      "Move slowly and avoid rushing.",
-      "Stop immediately if sharp pain occurs."
-    ],
-    note: "Optional challenge — completing it is not required to finish today's session."
-  }
 };
 
 const TAB_LABELS = {
