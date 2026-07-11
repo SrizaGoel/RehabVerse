@@ -55,3 +55,59 @@ create table activity_progress (
     primary key(user_id, activity_id)
 );
 
+insert into activities
+(id, title, category, exercise, body_part, movement)
+values
+('forgotten_orchestra', 'Forgotten Orchestra', 'game', 'Side Arm Raise', 'Shoulder', 'Abduction'),
+('fishing', 'Fishing Adventure', 'game', 'Elbow Raise', 'Elbow', 'Flexion'),
+('paint_the_object', 'Paint the Object', 'challenge', 'Arm Raise', 'Shoulder', 'Abduction'),
+('belle_pose', 'Belle Pose', 'challenge', 'Shoulder Rotation', 'Shoulder', 'External Rotation');
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+
+  insert into public.profiles (id)
+  values (new.id);
+
+  insert into public.user_progress (user_id)
+  values (new.id);
+
+  return new;
+
+end;
+$$;
+create table user_recoveries (
+
+    id uuid primary key default gen_random_uuid(),
+
+    user_id uuid not null
+        references profiles(id)
+        on delete cascade,
+
+    surgery text not null,
+
+    side text not null,
+
+    current_week integer default 1,
+
+    morning_progress integer default 0,
+
+    morning_total integer default 3,
+
+    morning_completed boolean default false,
+
+    morning_completed_at timestamptz,
+
+    evening_progress integer default 0,
+
+    evening_total integer default 3,
+
+    evening_completed boolean default false,
+
+    created_at timestamptz default now()
+
+);
