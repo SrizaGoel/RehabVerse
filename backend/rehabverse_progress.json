@@ -1,24 +1,20 @@
 {
   "week_idx": 0,
-  "day_number": 2,
-  "last_active_date": "2026-07-10",
-  "hold_target": 5.0,
-  "rep_target": 5,
+  "day_number": 3,
+  "last_active_date": "2026-07-11",
+  "hold_target": 7.0,
+  "rep_target": 6,
   "morning_done": true,
-  "evening_done": true,
+  "evening_done": false,
   "today_morning_record": {
     "rom": true,
     "hold": true,
     "reps": false
   },
-  "today_evening_record": {
-    "rom": true,
-    "hold": true,
-    "reps": true
-  },
+  "today_evening_record": null,
   "day7_morning": null,
   "day7_evening": null,
-  "streak": 1,
+  "streak": 2,
   "kingdom": [
     false,
     false,

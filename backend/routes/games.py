@@ -51,7 +51,7 @@ def start_game():
     try:
         module = importlib.import_module(f"games.{GAME_MODULES[game]}")
 
-        result = module.main()
+        result = module.main(data)
 
         return jsonify(result)
 
