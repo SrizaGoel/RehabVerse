@@ -738,6 +738,35 @@ export function Dashboard() {
   const morningCompleted = progress?.morning_completed ?? false;
   const eveningCompleted = progress?.evening_completed ?? false;
   const navigate = useNavigate();
+  const [showProfile, setShowProfile] = useState(false);
+async function handleLogout() {
+
+    const { error } = await supabase.auth.signOut();
+
+    if(error){
+        console.log(error);
+    }
+
+    setShowProfile(false);
+
+}
+useEffect(() => {
+
+    function closeProfile(e){
+
+        if(!e.target.closest(".profile-container")){
+
+            setShowProfile(false);
+
+        }
+
+    }
+
+    document.addEventListener("click",closeProfile);
+
+    return ()=>document.removeEventListener("click",closeProfile);
+
+},[]);
   return (
     <>
       {showProfileSetup && (
@@ -766,16 +795,78 @@ export function Dashboard() {
             </a>
           </li>
         </ul>
-        <div className="profile">
-          {
-            profile?.full_name
-              ? profile.full_name
-                .split(" ")
-                .map(word => word[0])
-                .join("")
-                .toUpperCase()
-              : user?.email[0].toUpperCase()
-          }
+        <div className="profile-container">
+
+<div
+    className="profile-circle"
+    onClick={(e)=>{
+
+        e.stopPropagation();
+
+        setShowProfile(prev=>!prev);
+
+    }}
+>
+            {profile?.full_name
+              ?.split(" ")
+              .map(n => n[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()}
+          </div>
+
+          {showProfile && (
+
+            <div className="profile-dropdown">
+
+              <div className="profile-top">
+
+                <div className="avatar">
+
+                  {profile?.full_name
+                    ?.split(" ")
+                    .map(n => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+
+                </div>
+
+                <div>
+
+                  <h3>{profile?.full_name}</h3>
+
+                  <p>{user?.email}</p>
+
+                </div>
+
+              </div>
+
+              <div className="profile-divider"></div>
+
+              <div className="profile-row">
+                <span>Age</span>
+                <span>{profile?.age}</span>
+              </div>
+
+              <div className="profile-row">
+                <span>Gender</span>
+                <span>{profile?.gender}</span>
+              </div>
+
+              <div className="profile-divider"></div>
+
+              <button
+                className="logout-btn"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+
+            </div>
+
+          )}
+
         </div>
       </nav>
 
@@ -812,24 +903,23 @@ export function Dashboard() {
 
               return (
                 <div className="surgery" key={rec.id} style={{ marginBottom: '28px' }}>
-<div className="surgery-header-row">
-  <div className="surgery-info">
-    <span className="surgery-indicator"></span>
+                  <div className="surgery-header-row">
+                    <div className="surgery-info">
+                      <span className="surgery-indicator"></span>
 
-    <span className="surgery-label">
-      {`${getSurgeryDisplayName(rec.surgery)} • ${
-        rec.side.charAt(0).toUpperCase() + rec.side.slice(1)
-      } Side • Week ${rec.current_week}`}
-    </span>
-  </div>
+                      <span className="surgery-label">
+                        {`${getSurgeryDisplayName(rec.surgery)} • ${rec.side.charAt(0).toUpperCase() + rec.side.slice(1)
+                          } Side • Week ${rec.current_week}`}
+                      </span>
+                    </div>
 
-  <button
-    className="delete-path-btn"
-    onClick={() => handleRemoveRecovery(rec.id)}
-  >
-    Delete Path
-  </button>
-</div>
+                    <button
+                      className="delete-path-btn"
+                      onClick={() => handleRemoveRecovery(rec.id)}
+                    >
+                      Delete Path
+                    </button>
+                  </div>
                   <div className="session-grid">
                     {/* Morning Session */}
                     <div className={morningDetails.cardClass}>

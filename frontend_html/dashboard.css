@@ -226,83 +226,25 @@ a {
     margin-bottom: 0;
 }
 
-/* .surgery-header-row {
+.surgery-number {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 14px;
-}
-
-.surgery-label {
-    font-size: .82rem;
-    font-weight: 700;
-    color: var(--text-light);
+    gap: 10px;
+    font-size: .78rem;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: .05em;
-    text-align: right;
-} */
-
-.surgery-header-row{
-    display:flex;
-    align-items:center;      /* Vertical center */
-    justify-content:space-between;
-    width:100%;
-    margin-bottom:18px;
+    letter-spacing: .09em;
+    color: var(--text-light);
+    margin: 0 0 14px;
 }
 
-.surgery-info{
-    display:flex;
-    align-items:center;      /* Vertical center */
-    gap:14px;
-    flex:1;
+.surgery-number::before {
+    content: "";
+    width: 4px;
+    height: 14px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, #14B8A6, #0F766E);
 }
-
-.surgery-indicator{
-    width:8px;
-    height:32px;
-    border-radius:999px;
-    background:linear-gradient(180deg,#14B8A6,#0F766E);
-    flex-shrink:0;
-}
-
-.surgery-label{
-    font-size:.95rem;
-    font-weight:700;
-    color:var(--text-light);
-    text-transform:uppercase;
-    letter-spacing:.05em;
-    line-height:1;           /* <-- Important */
-}
-
-.delete-path-btn{
-    width:auto !important;
-    flex:0 0 auto;
-    margin-left:auto;
-
-    border:none;
-    background:none;
-    color:#ef4444;
-    cursor:pointer;
-
-    font-size:.92rem;
-    font-weight:600;
-    line-height:1;           /* <-- Important */
-    padding:0;
-    align-self:center;       /* <-- Important */
-    position: relative;
-    top:-15px;
-    left:-5px;
-}
-
-.delete-path-btn:hover{
-    background:transparent;
-    color:#ef4444;
-}
-
-
-
-
-
 
 .session-card {
     background: #FBFDFD;
@@ -367,11 +309,6 @@ a {
 .locked {
     background: #FEF3C7;
     color: #B45309;
-}
-
-.completed {
-    background: #DBEAFE;
-    color: #1D4ED8;
 }
 
 .progress-info {
@@ -805,221 +742,4 @@ a {
         transform:scale(1);
         opacity:1;
     }
-}
-/* ================= Profile ================= */
-
-.profile-container{
-    position:relative;
-}
-
-.profile-circle{
-    width:48px;
-    height:48px;
-
-    border-radius:50%;
-
-    background:linear-gradient(135deg,#14b8a6,#0f766e);
-
-    color:white;
-
-    display:flex;
-    justify-content:center;
-    align-items:center;
-
-    font-weight:700;
-    font-size:1rem;
-
-    cursor:pointer;
-
-    user-select:none;
-
-    transition:.25s;
-}
-
-.profile-circle:hover{
-
-    transform:scale(1.06);
-
-    box-shadow:0 10px 25px rgba(20,184,166,.35);
-
-}
-
-.profile-dropdown{
-
-    position:absolute;
-
-    top:60px;
-    right:0;
-
-    width:300px;
-
-    background:rgba(255,255,255,.92);
-
-    backdrop-filter:blur(18px);
-
-    border-radius:20px;
-
-    border:1px solid rgba(255,255,255,.6);
-
-    box-shadow:0 18px 40px rgba(15,118,110,.15);
-
-    padding:22px;
-
-    z-index:1000;
-
-    animation:dropdownFade .22s ease;
-}
-
-@keyframes dropdownFade{
-
-    from{
-
-        opacity:0;
-
-        transform:translateY(-10px);
-
-    }
-
-    to{
-
-        opacity:1;
-
-        transform:translateY(0);
-
-    }
-
-}
-
-.profile-top{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:14px;
-
-}
-
-.avatar{
-
-    width:54px;
-
-    height:54px;
-
-    border-radius:50%;
-
-    background:linear-gradient(135deg,#14b8a6,#0f766e);
-
-    color:white;
-
-    display:flex;
-
-    justify-content:center;
-
-    align-items:center;
-
-    font-size:1.1rem;
-
-    font-weight:700;
-
-    flex-shrink:0;
-
-}
-
-.profile-top h3{
-
-    color:#0f766e;
-
-    font-size:1rem;
-
-    margin-bottom:4px;
-
-}
-
-.profile-top p{
-
-    color:#64748b;
-
-    font-size:.82rem;
-
-    word-break:break-word;
-
-}
-
-.profile-divider{
-
-    height:1px;
-
-    background:#e2e8f0;
-
-    margin:18px 0;
-
-}
-
-.profile-row{
-
-    display:flex;
-
-    justify-content:space-between;
-
-    align-items:center;
-
-    padding:8px 0;
-
-    color:#334155;
-
-    font-size:.95rem;
-
-}
-
-.profile-row span:first-child{
-
-    font-weight:600;
-
-    color:#64748b;
-
-}
-
-.logout-btn{
-
-    width:100%;
-
-    padding:12px;
-
-    margin-top:8px;
-
-    border:none;
-
-    border-radius:12px;
-
-    background:#fef2f2;
-
-    color:#dc2626;
-
-    font-weight:600;
-
-    cursor:pointer;
-
-    transition:.25s;
-
-}
-
-.logout-btn:hover{
-
-    background:#fee2e2;
-
-    transform:translateY(-1px);
-
-}
-
-@media(max-width:768px){
-
-    .profile-dropdown{
-
-        width:260px;
-
-        right:-10px;
-
-    }
-
 }
