@@ -195,7 +195,7 @@ const TAB_LABELS = {
   tips: 'Success Tips'
 };
 
-export default function ExerciseModal({ isOpen, onClose, exercises, challenges, onComplete, onAwardXp, onExerciseComplete }) {
+export default function ExerciseModal({ isOpen, onClose, exercises, challenges, onComplete, onAwardXp, onExerciseComplete, recovery, sessionType, userId, onChallengeComplete }) {
   const [view, setView] = useState('list'); // 'list' | 'detail'
   const [activeItem, setActiveItem] = useState(null);
   const [activeTab, setActiveTab] = useState('goal');
@@ -226,13 +226,17 @@ export default function ExerciseModal({ isOpen, onClose, exercises, challenges, 
 
   const backToList = () => setView('list');
 
-  const markComplete = (item) => {
+  const markComplete = (item, gameResult) => {
     let newCompletedIds = completedIds;
 
     if (!completedIds.includes(item.id)) {
       onAwardXp?.(item.isChallenge ? 25 : 10);
       if (!item.isChallenge) {
         onExerciseComplete?.();
+      }
+      // If it's a challenge, persist its specific metrics immediately
+      if (item.isChallenge && gameResult) {
+        onChallengeComplete?.(item.id, gameResult);
       }
       newCompletedIds = [...completedIds, item.id];
       setCompletedIds(newCompletedIds);
@@ -243,7 +247,7 @@ export default function ExerciseModal({ isOpen, onClose, exercises, challenges, 
       exerciseList.every(ex => newCompletedIds.includes(ex.id));
 
     if (allDone) {
-      onComplete?.(); // triggers handleSessionComplete → closes modal + saves to DB
+      onComplete?.(gameResult); // triggers handleSessionComplete → closes modal + saves to DB
     } else {
       setView('list');
     }
@@ -253,6 +257,8 @@ export default function ExerciseModal({ isOpen, onClose, exercises, challenges, 
     onComplete?.();
   };
   const launchGame = async (item) => {
+    // Map frontend side string to game side char
+    const sideChar = recovery?.side === 'right' ? 'R' : 'L';
 
     const response = await fetch(
       "http://127.0.0.1:5000/games/start",
@@ -262,7 +268,12 @@ export default function ExerciseModal({ isOpen, onClose, exercises, challenges, 
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          game: item.id
+          game: item.id,
+          user_id: userId ?? null,
+          recovery_id: recovery?.id ?? null,
+          side: sideChar,
+          session_type: sessionType ?? 'morning',
+          current_week: recovery?.current_week ?? 1
         })
       }
     );
@@ -271,7 +282,7 @@ export default function ExerciseModal({ isOpen, onClose, exercises, challenges, 
 
     console.log(data);
 
-    markComplete(item);
+    markComplete(item, data);
   };
   const renderItemCard = (item, index, isChallenge) => {
     const isDone = completedIds.includes(item.id);

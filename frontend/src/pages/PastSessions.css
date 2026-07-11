@@ -1,0 +1,297 @@
+.past-page{
+    min-height:100vh;
+    background:#eef8f7;
+    padding:45px 7%;
+}
+
+.back-btn{
+
+    background:#0f766e;
+    color:white;
+
+    border:none;
+
+    padding:10px 18px;
+
+    border-radius:12px;
+
+    cursor:pointer;
+
+    font-weight:600;
+
+    margin-bottom:30px;
+
+    transition:.2s;
+}
+
+.back-btn:hover{
+
+    background:#115e59;
+
+}
+
+.history-header{
+
+    margin-bottom:35px;
+
+}
+
+.history-header h1{
+
+    color:#0f766e;
+
+    font-size:2.2rem;
+
+    margin-bottom:6px;
+
+}
+
+.subtitle{
+
+    color:#64748b;
+
+}
+
+.empty-card{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:60px;
+
+    text-align:center;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.05);
+
+}
+
+.history-list{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:22px;
+
+}
+
+.session-history-card{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:24px;
+
+    border-left:6px solid #14b8a6;
+
+    box-shadow:0 8px 18px rgba(0,0,0,.06);
+
+    transition:.25s;
+
+}
+
+.session-history-card:hover{
+
+    transform:translateY(-3px);
+
+    box-shadow:0 15px 30px rgba(0,0,0,.1);
+
+}
+
+.card-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:flex-start;
+
+    margin-bottom:18px;
+
+}
+
+.card-header h3{
+
+    color:#0f766e;
+
+    font-size:1.3rem;
+
+    margin-bottom:12px;
+
+}
+
+.date{
+
+    color:#94a3b8;
+
+    font-size:.9rem;
+
+}
+
+.session-tags{
+
+    display:flex;
+
+    gap:10px;
+
+    flex-wrap:wrap;
+
+}
+
+.tag{
+
+    background:#ecfdf5;
+
+    color:#065f46;
+
+    padding:5px 12px;
+
+    border-radius:999px;
+
+    font-size:.8rem;
+
+    font-weight:600;
+
+}
+
+.tag-missed{
+
+    background:#fef2f2;
+
+    color:#991b1b;
+
+    border:1.5px solid #fca5a5;
+
+}
+
+.session-history-card.missed-card{
+
+    border-left:6px solid #ef4444;
+
+    background:#fffbfb;
+
+}
+
+.section{
+
+    margin-top:18px;
+
+}
+
+.section h4{
+
+    color:#334155;
+
+    margin-bottom:14px;
+
+    font-size:1rem;
+
+}
+
+.objective-list{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:10px;
+
+}
+
+.objective-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    padding:10px 0;
+
+    border-bottom:1px solid #eef2f7;
+
+}
+
+.success{
+
+    color:#16a34a;
+
+    font-weight:600;
+
+}
+
+.failed{
+
+    color:#dc2626;
+
+    font-weight:600;
+
+}
+
+.metric-grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+
+    gap:14px;
+
+}
+
+.metric-card{
+
+    background:#f8fafc;
+
+    border-radius:14px;
+
+    padding:14px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:6px;
+
+}
+
+.metric-title{
+
+    color:#64748b;
+
+    font-size:.82rem;
+
+}
+
+.metric-value{
+
+    color:#0f172a;
+
+    font-size:1.15rem;
+
+    font-weight:700;
+
+}
+
+@media(max-width:768px){
+
+    .past-page{
+
+        padding:25px;
+
+    }
+
+    .card-header{
+
+        flex-direction:column;
+
+        gap:15px;
+
+    }
+
+    .metric-grid{
+
+        grid-template-columns:1fr;
+
+    }
+
+}

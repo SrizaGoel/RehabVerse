@@ -336,7 +336,7 @@ export function Dashboard() {
     setModalOpen(true);
   };
 
-  const handleSessionComplete = async () => {
+  const handleSessionComplete = async (gameResult) => {
     console.log("Session completed!");
     console.log(activeExerciseSession);
     if (!activeExerciseSession) return;
@@ -401,11 +401,30 @@ export function Dashboard() {
           user_id: user.id,
           activity_id: activityId,
           completed: true,
-          metrics: {
-            week: recovery.current_week,
-            session: sessionType
-          }
+          metrics: gameResult
         });
+
+      // Advance week in DB if the game returned a higher week number
+      const gameWeek = gameResult?.session?.week;
+      if (gameWeek && gameWeek > recovery.current_week) {
+        await supabase
+          .from('user_recoveries')
+          .update({ current_week: gameWeek })
+          .eq('id', recoveryId);
+      }
+
+      // Increment streak when evening session completes
+      if (sessionType === 'evening') {
+        const { data: freshProgress } = await supabase
+          .from('user_progress')
+          .select('current_streak')
+          .eq('user_id', user.id)
+          .single();
+        await supabase
+          .from('user_progress')
+          .update({ current_streak: (freshProgress?.current_streak ?? 0) + 1 })
+          .eq('user_id', user.id);
+      }
     }
 
     // Refresh both recoveries and user data (XP, streak, etc.)
@@ -439,6 +458,20 @@ export function Dashboard() {
     }
 
     fetchUserData();
+  }
+
+  async function handleChallengeComplete(challengeId, gameResult) {
+    if (!activeExerciseSession?.recoveryId) return;
+    const { recoveryId } = activeExerciseSession;
+
+    await supabase
+      .from('sessions')
+      .insert({
+        user_id: user.id,
+        activity_id: challengeId,
+        completed: true,
+        metrics: gameResult
+      });
   }
 
   // Optimistically update local progress count when a single exercise is completed
@@ -592,7 +625,99 @@ export function Dashboard() {
       return;
     }
 
-    setActiveRecoveries(data);
+    // ── Daily reset: if a recovery's last activity was before today, reset its
+    //    session flags, record any missed sessions, and reset the streak.
+    const todayStr = new Date().toLocaleDateString('sv-SE');   // YYYY-MM-DD in local time
+    const updatedRecoveries = [];
+
+    for (const rec of (data || [])) {
+      // Determine the date of last interaction
+      const lastDate = rec.morning_completed_at
+        ? new Date(rec.morning_completed_at).toLocaleDateString('sv-SE')
+        : null;
+
+      const needsReset = lastDate && lastDate < todayStr;
+
+      if (needsReset) {
+        // Count elapsed days so we can record a missed-session entry for each
+        const lastD = new Date(lastDate);
+        const todayD = new Date(todayStr);
+        const elapsedDays = Math.max(
+          1,
+          Math.round((todayD - lastD) / (1000 * 60 * 60 * 24))
+        );
+
+        // For every elapsed day, log missed sessions that were not completed
+        const missedInserts = [];
+        for (let d = 0; d < elapsedDays; d++) {
+          const missedDate = new Date(lastD);
+          missedDate.setDate(lastD.getDate() + d);
+          const missedDateStr = missedDate.toISOString();
+
+          if (d === 0) {
+            // The last-active day itself — only log what was NOT completed
+            if (!rec.morning_completed) {
+              missedInserts.push({
+                user_id: user.id,
+                activity_id: (rehabPrograms[rec.surgery]?.exercises?.[0]) ?? 'forgotten_orchestra',
+                completed: false,
+                metrics: { missed: true, slot: 'morning', date: missedDateStr, recovery_id: rec.id }
+              });
+            }
+            if (!rec.evening_completed) {
+              missedInserts.push({
+                user_id: user.id,
+                activity_id: (rehabPrograms[rec.surgery]?.exercises?.[0]) ?? 'forgotten_orchestra',
+                completed: false,
+                metrics: { missed: true, slot: 'evening', date: missedDateStr, recovery_id: rec.id }
+              });
+            }
+          } else {
+            // Fully missed days — both slots
+            for (const slot of ['morning', 'evening']) {
+              missedInserts.push({
+                user_id: user.id,
+                activity_id: (rehabPrograms[rec.surgery]?.exercises?.[0]) ?? 'forgotten_orchestra',
+                completed: false,
+                metrics: { missed: true, slot, date: missedDateStr, recovery_id: rec.id }
+              });
+            }
+          }
+        }
+
+        if (missedInserts.length > 0) {
+          await supabase.from('sessions').insert(missedInserts);
+        }
+
+        // Reset streak if any session was missed
+        if (!rec.morning_completed || !rec.evening_completed) {
+          await supabase
+            .from('user_progress')
+            .update({ current_streak: 0 })
+            .eq('user_id', user.id);
+        }
+
+        // Reset the recovery for today
+        const { data: resetData } = await supabase
+          .from('user_recoveries')
+          .update({
+            morning_progress: 0,
+            morning_completed: false,
+            morning_completed_at: null,
+            evening_progress: 0,
+            evening_completed: false
+          })
+          .eq('id', rec.id)
+          .select()
+          .single();
+
+        updatedRecoveries.push(resetData ?? { ...rec, morning_progress: 0, morning_completed: false, morning_completed_at: null, evening_progress: 0, evening_completed: false });
+      } else {
+        updatedRecoveries.push(rec);
+      }
+    }
+
+    setActiveRecoveries(updatedRecoveries);
   }
   useEffect(() => {
     fetchProfile();
@@ -907,6 +1032,10 @@ export function Dashboard() {
         onComplete={handleSessionComplete}
         onAwardXp={handleAwardXp}
         onExerciseComplete={handleExerciseComplete}
+        recovery={activeRecoveries.find(r => r.id === activeExerciseSession?.recoveryId)}
+        sessionType={activeExerciseSession?.sessionType}
+        userId={user?.id}
+        onChallengeComplete={handleChallengeComplete}
       />
     </>
   );
