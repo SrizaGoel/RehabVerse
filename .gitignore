@@ -2,3 +2,12 @@ venv/
 __pycache__/
 *.pyc
 extra
+backend/build/
+backend/dist/
+frontend/release/
+*.spec
+*.task
+*.db
+session_log.csv
+package-lock.json is fine to keep — leave that one
+games/*progress_*.json

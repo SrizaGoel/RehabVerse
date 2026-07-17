@@ -1,34 +1,4 @@
-"""
-RehabVerse — The Forgotten Orchestra  (v4)
-==========================================
-This version implements the finalized "RehabVerse Final Rehabilitation Flow"
-spec on top of the v3 pose/audio/visual engine:
 
-  • Weekly ROM goal is FIXED for the whole week (no more penalty-day drops).
-  • Hold Time and Rep Target are the only adaptive parameters. They ramp
-    up day over day when the patient performs well, and step back down
-    on a missed/poor day. They never affect the ROM goal.
-  • Two independent sessions per day: Morning and Evening.
-  • Each session shows a live "Today's Objectives" checklist (ROM / Hold /
-    Reps / Restore Orchestra) and starts the orchestra at 0% every time.
-  • Day 7 is the official Weekly Assessment: both Morning and Evening
-    sessions are tested against the week's FINAL hold/rep targets (not
-    the daily adaptive ones). The week only clears if BOTH sessions meet
-    ROM + Hold + Reps. Otherwise -> "Week Extended" (never "Week Failed").
-  • A permanent "Kingdom Orchestra" tracks one restored instrument family
-    per completed week, independent of daily session resets.
-  • Daily Dashboard HUD shows week/day, targets, session status, today's
-    orchestra %, kingdom %, and streak.
-
-Install:
-    pip install opencv-python mediapipe numpy pygame
-
-Run:
-    python forgotten_orchestra_v4.py
-
-Future : 
-    specify arm (l OR r) !IMPORTANT
-"""
 
 import cv2
 import numpy as np
@@ -43,9 +13,6 @@ import pygame
 import pygame.sndarray
 import mediapipe as mp
 
-# ──────────────────────────────────────────────
-# CONSTANTS
-# ──────────────────────────────────────────────
 W, H        = 1280, 720
 SAMPLE_RATE = 44100
 CHUNK       = 1024
@@ -53,13 +20,7 @@ DATA_FILE   = "rehabverse_progress.json"
 
 KINGDOM_NAMES = ["Strings", "Woodwinds", "Brass", "Choir", "Percussion", "Full Orchestra"]
 
-# ──────────────────────────────────────────────
-# REHAB WEEK DEFINITIONS
-#   max_angle          = FIXED weekly ROM goal (never changes mid-week)
-#   start_hold/final_hold = adaptive hold time range for the week
-#   start_reps/final_reps = adaptive rep target range for the week
-#   final_hold/final_reps are also what Day 7 assessment tests against
-# ──────────────────────────────────────────────
+
 REHAB_WEEKS = [
     {
         "label": "Week 1", "max_angle": 45,
@@ -124,9 +85,6 @@ REHAB_WEEKS = [
 ]
 LAST_WEEK_IDX = len(REHAB_WEEKS) - 1
 
-# ──────────────────────────────────────────────
-# PERSISTENCE — week / day / session state machine
-# ──────────────────────────────────────────────
 def today_str():
     return str(date.today())
 
@@ -262,9 +220,7 @@ def finalize_session(prog, slot, rom_met, hold_met, reps_met):
 def default_session_slot():
     return "morning" if time.localtime().tm_hour < 14 else "evening"
 
-# ──────────────────────────────────────────────
-# AUDIO ENGINE  (unchanged musical building blocks from v3)
-# ──────────────────────────────────────────────
+
 pygame.mixer.pre_init(SAMPLE_RATE, -16, 2, CHUNK)
 pygame.init()
 
@@ -361,13 +317,6 @@ class AudioEngine:
     def stop(self):
         pygame.mixer.stop()
 
-# ──────────────────────────────────────────────
-# INSTRUMENT VISUALS
-#   Unlocking is now driven by SESSION OBJECTIVE milestones, not raw angle:
-#     ROM objective met   -> instruments 0,1 awaken
-#     Hold objective met  -> instruments 2,3 awaken
-#     Reps objective met  -> instruments 4,5 awaken (100% restored)
-# ──────────────────────────────────────────────
 INSTRUMENT_NAMES = ["Triangle","Flute","Violin","Cello","Choir","Orchestra"]
 
 def instrument_colors(week_idx):
@@ -504,9 +453,6 @@ class InstrumentSection:
             cv2.circle(frame,(self.cx,self.cy),int(50*self.unlock_anim),
                        (int(b*al),int(g*al),int(r*al)),2)
 
-# ──────────────────────────────────────────────
-# SESSION OBJECTIVES + ORCHESTRA STAGE
-# ──────────────────────────────────────────────
 class SessionObjectives:
     """Tracks the 4 checklist items for the CURRENT session only."""
     def __init__(self, rom_target, hold_target, rep_target):
@@ -624,9 +570,6 @@ class OrchestraStage:
             cv2.line(frame,(s.cx,stage_y),(s.cx,s.cy+35),(45,40,55),1)
             s.draw(frame, t)
 
-# ──────────────────────────────────────────────
-# DAY BRIEFING OVERLAY  (pre-session screen)
-# ──────────────────────────────────────────────
 def draw_day_briefing(frame, prog, chosen_slot):
     week = REHAB_WEEKS[prog["week_idx"]]
     is_day7 = prog["day_number"] == 7
@@ -678,9 +621,7 @@ def draw_day_briefing(frame, prog, chosen_slot):
     cv2.putText(frame,"Press ENTER/SPACE to begin the highlighted session, or Q to quit.",
                 (W//2-320,y),cv2.FONT_HERSHEY_SIMPLEX,0.34,(120,115,140),1)
 
-# ──────────────────────────────────────────────
-# POSE HELPERS
-# ──────────────────────────────────────────────
+
 def calc_angle(a, b, c):
     a,b,c = np.array(a),np.array(b),np.array(c)
     angle = abs(math.degrees(
@@ -714,9 +655,6 @@ def draw_conductor_arc(frame, angle, cx, cy, week_max, theme_col):
     tx,ty = int(cx+70*math.cos(tick_rad)),int(cy+70*math.sin(tick_rad))
     cv2.circle(frame,(tx,ty),3,(180,100,255),-1)
 
-# ──────────────────────────────────────────────
-# IN-SESSION HUD  — Objectives checklist + Daily Dashboard
-# ──────────────────────────────────────────────
 def draw_hud(frame, angle, stage, prog, slot, is_day7):
     week     = REHAB_WEEKS[stage.week_idx]
     obj      = stage.objectives
@@ -942,24 +880,21 @@ def main(params=None):
             "assessment_day": is_day7
         },
 
-        "metrics": {
-            "rom_goal": week["max_angle"],
-            "max_angle": obj.session_max_angle,
+        "objectives": [
+            { "label": "Range of Motion Goal Met", "completed": bool(obj.rom_met) },
+            { "label": "Hold Target Met", "completed": bool(obj.hold_met) },
+            { "label": "Repetitions Target Met", "completed": bool(obj.reps_met) }
+        ],
 
-            "hold_target": obj.hold_target,
-            "hold_time": obj.session_max_hold,
-
-            "rep_target": obj.rep_target,
-            "repetitions": obj.reps,
-
-            "orchestra_progress": stage.music_progress
-        },
-
-        "objectives": {
-            "rom_met": obj.rom_met,
-            "hold_met": obj.hold_met,
-            "reps_met": obj.reps_met
-        },
+        "metrics": [
+            { "label": "Abduction Goal", "value": week["max_angle"], "unit": "°" },
+            { "label": "Max Abduction Angle", "value": round(obj.session_max_angle, 1), "unit": "°" },
+            { "label": "Hold Target", "value": obj.hold_target, "unit": "s" },
+            { "label": "Peak End-Range Hold", "value": round(obj.session_max_hold, 1), "unit": "s" },
+            { "label": "Repetition Target", "value": obj.rep_target, "unit": "" },
+            { "label": "Repetitions Completed", "value": obj.reps, "unit": "" },
+            { "label": "Orchestra Progress", "value": int(stage.music_progress), "unit": "%" }
+        ],
         "timestamp": datetime.now().isoformat(),
     }
     print("\n========== SESSION RESULT ==========")

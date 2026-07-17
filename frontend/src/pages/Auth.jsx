@@ -12,6 +12,7 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  const [signupSuccess, setSignupSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
@@ -40,8 +41,10 @@ export default function Auth() {
 
       if (result.error) {
         alert(result.error.message);
-      } else {
+      } else if (isLogin) {
         navigate("/dashboard");
+      } else {
+        setSignupSuccess(true);
       }
     } catch (err) {
       alert(err.message);
@@ -62,74 +65,95 @@ export default function Auth() {
           Every movement brings you closer to recovery.
         </p>
 
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label>Email</label>
-
-            <input
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+        {signupSuccess ? (
+          <div className="signup-success">
+            <h3>Check your inbox</h3>
+            <p>
+              We've sent a confirmation link to <strong>{email}</strong>.
+              Please verify your email to activate your account.
+            </p>
+            <span
+              className="toggle-link"
+              onClick={() => {
+                setSignupSuccess(false);
+                setIsLogin(true);
+              }}
+            >
+              Back to Sign In
+            </span>
           </div>
-
-          <div className="input-group">
-            <label>Password</label>
-
-            <input
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          {!isLogin && (
+        ) : (
+          <form onSubmit={handleSubmit}>
             <div className="input-group">
-              <label>Confirm Password</label>
+              <label>Email</label>
+
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Password</label>
 
               <input
                 type="password"
-                placeholder="Confirm password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-          )}
 
-          <button type="submit" disabled={loading}>
-            {loading
-              ? "Please wait..."
-              : isLogin
-              ? "Sign In"
-              : "Create Account"}
-          </button>
-        </form>
+            {!isLogin && (
+              <div className="input-group">
+                <label>Confirm Password</label>
 
-        <p className="bottom-text">
-          {isLogin ? (
-            <>
-              Don't have an account?{" "}
-              <span
-                className="toggle-link"
-                onClick={() => setIsLogin(false)}
-              >
-                Create Account
-              </span>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <span
-                className="toggle-link"
-                onClick={() => setIsLogin(true)}
-              >
-                Sign In
-              </span>
-            </>
-          )}
-        </p>
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+            )}
+
+            <button type="submit" disabled={loading}>
+              {loading
+                ? "Please wait..."
+                : isLogin
+                  ? "Sign In"
+                  : "Create Account"}
+            </button>
+          </form>
+        )}
+
+        {!signupSuccess && (
+          <p className="bottom-text">
+            {isLogin ? (
+              <>
+                Don't have an account?{" "}
+                <span
+                  className="toggle-link"
+                  onClick={() => setIsLogin(false)}
+                >
+                  Create Account
+                </span>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <span
+                  className="toggle-link"
+                  onClick={() => setIsLogin(true)}
+                >
+                  Sign In
+                </span>
+              </>
+            )}
+          </p>
+        )}
       </div>
     </div>
   );

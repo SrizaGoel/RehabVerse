@@ -34,7 +34,10 @@ const rehabPrograms = {
   rotatorCuffRepair: {
     affectedPart: "shoulder",
     exercises: [
-      "forgotten_orchestra"
+      "forgotten_orchestra",
+      "aether_guardian",
+      "tide_caller",
+      "phoenix_ascend"
     ],
     challenges: [
       "paint_the_object",
@@ -44,7 +47,10 @@ const rehabPrograms = {
   frozenShoulder: {
     affectedPart: "shoulder",
     exercises: [
-      "forgotten_orchestra"
+      "forgotten_orchestra",
+      "aether_guardian",
+      "tide_caller",
+      "phoenix_ascend"
     ],
     challenges: [
       "paint_the_object",
@@ -54,7 +60,10 @@ const rehabPrograms = {
   shoulderArthroscopy: {
     affectedPart: "shoulder",
     exercises: [
-      "forgotten_orchestra"
+      "forgotten_orchestra",
+      "aether_guardian",
+      "tide_caller",
+      "phoenix_ascend"
     ],
     challenges: [
       "paint_the_object",
@@ -64,7 +73,10 @@ const rehabPrograms = {
   shoulderReplacement: {
     affectedPart: "shoulder",
     exercises: [
-      "forgotten_orchestra"
+      "forgotten_orchestra",
+      "aether_guardian",
+      "tide_caller",
+      "phoenix_ascend"
     ],
     challenges: [
       "paint_the_object",
@@ -74,7 +86,10 @@ const rehabPrograms = {
   labrumRepair: {
     affectedPart: "shoulder",
     exercises: [
-      "forgotten_orchestra"
+      "forgotten_orchestra",
+      "aether_guardian",
+      "tide_caller",
+      "phoenix_ascend"
     ],
     challenges: [
       "paint_the_object",
@@ -176,7 +191,30 @@ const rehabPrograms = {
   }
 };
 
-// if that particular exercise in games section have certain week numners for example some exercise have only  7 weeks then last week set at recovery automatically
+// Number of weeks each individual game's OWN difficulty schedule spans.
+// IMPORTANT: keep these in sync with each game's own SCHEDULE. Confirmed
+// so far: elbow_fishing_rehab.py's SCHEDULE covers weeks 1-4, so fishing=4.
+// The rest are placeholders (6) until you confirm their SCHEDULE length --
+// update them to match, or the week map below will be wrong for those paths.
+const EXERCISE_WEEKS = {
+  fishing: 4,               // confirmed from elbow_fishing_rehab.py
+  forgotten_orchestra: 6,   // TODO: confirm against forgotten_orchestra.py
+  aether_guardian: 6,       // TODO: confirm
+  tide_caller: 6,           // TODO: confirm
+  phoenix_ascend: 6,        // TODO: confirm
+  leg_raise: 6,             // TODO: confirm
+};
+
+// A recovery path can't be "Recovered" until every exercise in it —
+// including whichever one runs longest — has finished its own week
+// schedule. So the path's total duration is the MAX across its exercises,
+// not a fixed number.
+function getProgramTotalWeeks(surgeryKey) {
+  const program = rehabPrograms[surgeryKey];
+  if (!program || !program.exercises?.length) return 8;
+  const weeks = program.exercises.map(ex => EXERCISE_WEEKS[ex] ?? 8);
+  return Math.max(...weeks);
+}
 
 const getSurgeryDisplayName = (key) => {
   const names = {
@@ -387,23 +425,15 @@ export function Dashboard() {
       return;
     }
 
+    // FIX: `recovery` was never defined here before — referencing an
+    // undefined variable threw a ReferenceError, which silently killed
+    // everything below it (week advancement, streak increment, the
+    // fetchRecoveries()/fetchUserData() refresh, and closing the modal).
+    // Resolve it from local state (pre-update values are fine here since
+    // we only read `current_week`, which this update doesn't touch).
     const recovery = activeRecoveries.find(r => r.id === recoveryId);
 
     if (recovery) {
-      const activityId =
-        sessionType === "morning"
-          ? rehabPrograms[recovery.surgery].exercises[0]
-          : rehabPrograms[recovery.surgery].challenges?.[0] ?? rehabPrograms[recovery.surgery].exercises[0];
-
-      await supabase
-        .from("sessions")
-        .insert({
-          user_id: user.id,
-          activity_id: activityId,
-          completed: true,
-          metrics: gameResult
-        });
-
       // Advance week in DB if the game returned a higher week number
       const gameWeek = gameResult?.session?.week;
       if (gameWeek && gameWeek > recovery.current_week) {
@@ -476,17 +506,48 @@ export function Dashboard() {
 
   // Optimistically update local progress count when a single exercise is completed
   // so the card shows 0/1 → 1/1 immediately without waiting for DB
-  function handleExerciseComplete() {
+  async function handleExerciseComplete(exerciseId, gameResult) {
     if (!activeExerciseSession?.recoveryId) return;
     const { recoveryId, sessionType } = activeExerciseSession;
-    setActiveRecoveries(prev => prev.map(rec => {
-      if (rec.id !== recoveryId) return rec;
-      if (sessionType === 'morning') {
-        return { ...rec, morning_progress: Math.min(rec.morning_progress + 1, rec.morning_total) };
-      } else {
-        return { ...rec, evening_progress: Math.min(rec.evening_progress + 1, rec.evening_total) };
-      }
-    }));
+
+    const recovery = activeRecoveries.find(r => r.id === recoveryId);
+    if (!recovery) return;
+
+    const idsField = sessionType === 'morning' ? 'morning_completed_ids' : 'evening_completed_ids';
+    const progressField = sessionType === 'morning' ? 'morning_progress' : 'evening_progress';
+    const totalField = sessionType === 'morning' ? 'morning_total' : 'evening_total';
+
+    const existingIds = recovery[idsField] ?? [];
+    if (existingIds.includes(exerciseId)) return;
+
+    const updatedIds = [...existingIds, exerciseId];
+    const newProgress = Math.min(updatedIds.length, recovery[totalField]);
+
+    // optimistic local update
+    setActiveRecoveries(prev => prev.map(rec =>
+      rec.id === recoveryId
+        ? { ...rec, [idsField]: updatedIds, [progressField]: newProgress }
+        : rec
+    ));
+
+    const { error: recoveryError } = await supabase
+      .from('user_recoveries')
+      .update({ [idsField]: updatedIds, [progressField]: newProgress })
+      .eq('id', recoveryId);
+
+    if (recoveryError) console.error(recoveryError);
+
+    // Save this specific exercise session to Supabase sessions table
+    const { error: sessionError } = await supabase
+      .from('sessions')
+      .insert({
+        user_id: user.id,
+        activity_id: exerciseId,
+        completed: true,
+        metrics: gameResult
+      });
+
+    if (sessionError) console.error(sessionError);
   }
 
   // Cooldown & Status Computations for morning session
@@ -562,6 +623,16 @@ export function Dashboard() {
     .map(r => `${getSurgeryDisplayName(r.surgery)} (${r.side === 'left' ? 'L' : 'R'})`)
     .join(', ') || 'No active recoveries';
 
+  // Body diagram should color a part as "Recovered" (week8 color) only once
+  // that recovery's LONGEST exercise has finished its own week schedule —
+  // not at some fixed week number. So we cap/override current_week to 8
+  // here rather than changing what rec.current_week itself means elsewhere.
+  const bodyRecoveries = activeRecoveries.map(rec => {
+    const totalWeeks = getProgramTotalWeeks(rec.surgery);
+    const isRecovered = rec.current_week > totalWeeks;
+    return isRecovered ? { ...rec, current_week: 8 } : rec;
+  });
+
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
@@ -612,7 +683,7 @@ export function Dashboard() {
       setProgress(progressData);
 
   }
-  async function fetchRecoveries() {
+async function fetchRecoveries() {
 
     const { data, error } = await supabase
       .from("user_recoveries")
@@ -625,13 +696,10 @@ export function Dashboard() {
       return;
     }
 
-    // ── Daily reset: if a recovery's last activity was before today, reset its
-    //    session flags, record any missed sessions, and reset the streak.
-    const todayStr = new Date().toLocaleDateString('sv-SE');   // YYYY-MM-DD in local time
+    const todayStr = new Date().toLocaleDateString('sv-SE');
     const updatedRecoveries = [];
 
     for (const rec of (data || [])) {
-      // Determine the date of last interaction
       const lastDate = rec.morning_completed_at
         ? new Date(rec.morning_completed_at).toLocaleDateString('sv-SE')
         : null;
@@ -639,7 +707,6 @@ export function Dashboard() {
       const needsReset = lastDate && lastDate < todayStr;
 
       if (needsReset) {
-        // Count elapsed days so we can record a missed-session entry for each
         const lastD = new Date(lastDate);
         const todayD = new Date(todayStr);
         const elapsedDays = Math.max(
@@ -647,49 +714,49 @@ export function Dashboard() {
           Math.round((todayD - lastD) / (1000 * 60 * 60 * 24))
         );
 
-        // For every elapsed day, log missed sessions that were not completed
-        const missedInserts = [];
-        for (let d = 0; d < elapsedDays; d++) {
-          const missedDate = new Date(lastD);
-          missedDate.setDate(lastD.getDate() + d);
-          const missedDateStr = missedDate.toISOString();
+        // 
+        const allExercisesForProgram = rehabPrograms[rec.surgery]?.exercises ?? [];
 
-          if (d === 0) {
-            // The last-active day itself — only log what was NOT completed
-            if (!rec.morning_completed) {
-              missedInserts.push({
-                user_id: user.id,
-                activity_id: (rehabPrograms[rec.surgery]?.exercises?.[0]) ?? 'forgotten_orchestra',
-                completed: false,
-                metrics: { missed: true, slot: 'morning', date: missedDateStr, recovery_id: rec.id }
-              });
-            }
-            if (!rec.evening_completed) {
-              missedInserts.push({
-                user_id: user.id,
-                activity_id: (rehabPrograms[rec.surgery]?.exercises?.[0]) ?? 'forgotten_orchestra',
-                completed: false,
-                metrics: { missed: true, slot: 'evening', date: missedDateStr, recovery_id: rec.id }
-              });
-            }
-          } else {
-            // Fully missed days — both slots
-            for (const slot of ['morning', 'evening']) {
-              missedInserts.push({
-                user_id: user.id,
-                activity_id: (rehabPrograms[rec.surgery]?.exercises?.[0]) ?? 'forgotten_orchestra',
-                completed: false,
-                metrics: { missed: true, slot, date: missedDateStr, recovery_id: rec.id }
-              });
-            }
-          }
-        }
+const buildSlotInsert = (slot, dateStr, completedIds) => ({
+  user_id: user.id,
+  activity_id: rec.surgery,          // program key, e.g. "rotatorCuffRepair"
+  completed: false,
+  metrics: {
+    missed: completedIds.length === 0,
+    partial: completedIds.length > 0,
+    slot,
+    date: dateStr,
+    recovery_id: rec.id,
+    exercises: allExercisesForProgram,
+    completed_exercises: completedIds
+  }
+});
+
+const missedInserts = [];
+for (let d = 0; d < elapsedDays; d++) {
+  const missedDate = new Date(lastD);
+  missedDate.setDate(lastD.getDate() + d);
+  const missedDateStr = missedDate.toISOString();
+
+  if (d === 0) {
+    // today's slots - use whatever was actually completed before we reset
+    if (!rec.morning_completed) {
+      missedInserts.push(buildSlotInsert('morning', missedDateStr, rec.morning_completed_ids ?? []));
+    }
+    if (!rec.evening_completed) {
+      missedInserts.push(buildSlotInsert('evening', missedDateStr, rec.evening_completed_ids ?? []));
+    }
+  } else {
+    // fully skipped past days - nothing was done
+    missedInserts.push(buildSlotInsert('morning', missedDateStr, []));
+    missedInserts.push(buildSlotInsert('evening', missedDateStr, []));
+  }
+}
 
         if (missedInserts.length > 0) {
           await supabase.from('sessions').insert(missedInserts);
         }
 
-        // Reset streak if any session was missed
         if (!rec.morning_completed || !rec.evening_completed) {
           await supabase
             .from('user_progress')
@@ -697,21 +764,26 @@ export function Dashboard() {
             .eq('user_id', user.id);
         }
 
-        // Reset the recovery for today
         const { data: resetData } = await supabase
           .from('user_recoveries')
           .update({
             morning_progress: 0,
             morning_completed: false,
             morning_completed_at: null,
+            morning_completed_ids: [],
             evening_progress: 0,
-            evening_completed: false
+            evening_completed: false,
+            evening_completed_ids: []
           })
           .eq('id', rec.id)
           .select()
           .single();
 
-        updatedRecoveries.push(resetData ?? { ...rec, morning_progress: 0, morning_completed: false, morning_completed_at: null, evening_progress: 0, evening_completed: false });
+        updatedRecoveries.push(resetData ?? {
+          ...rec,
+          morning_progress: 0, morning_completed: false, morning_completed_at: null, morning_completed_ids: [],
+          evening_progress: 0, evening_completed: false, evening_completed_ids: []
+        });
       } else {
         updatedRecoveries.push(rec);
       }
@@ -719,6 +791,7 @@ export function Dashboard() {
 
     setActiveRecoveries(updatedRecoveries);
   }
+
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -739,34 +812,35 @@ export function Dashboard() {
   const eveningCompleted = progress?.evening_completed ?? false;
   const navigate = useNavigate();
   const [showProfile, setShowProfile] = useState(false);
-async function handleLogout() {
+  async function handleLogout() {
 
     const { error } = await supabase.auth.signOut();
 
-    if(error){
-        console.log(error);
+    if (error) {
+      console.log(error);
     }
 
     setShowProfile(false);
 
-}
-useEffect(() => {
+  }
+  useEffect(() => {
 
-    function closeProfile(e){
+    function closeProfile(e) {
 
-        if(!e.target.closest(".profile-container")){
+      if (!e.target.closest(".profile-container")) {
 
-            setShowProfile(false);
+        setShowProfile(false);
 
-        }
+      }
 
     }
 
-    document.addEventListener("click",closeProfile);
+    document.addEventListener("click", closeProfile);
 
-    return ()=>document.removeEventListener("click",closeProfile);
+    return () => document.removeEventListener("click", closeProfile);
 
-},[]);
+  }, []);
+
   return (
     <>
       {showProfileSetup && (
@@ -797,16 +871,16 @@ useEffect(() => {
         </ul>
         <div className="profile-container">
 
-<div
-    className="profile-circle"
-    onClick={(e)=>{
+          <div
+            className="profile-circle"
+            onClick={(e) => {
 
-        e.stopPropagation();
+              e.stopPropagation();
 
-        setShowProfile(prev=>!prev);
+              setShowProfile(prev => !prev);
 
-    }}
->
+            }}
+          >
             {profile?.full_name
               ?.split(" ")
               .map(n => n[0])
@@ -921,7 +995,6 @@ useEffect(() => {
                     </button>
                   </div>
                   <div className="session-grid">
-                    {/* Morning Session */}
                     <div className={morningDetails.cardClass}>
                       <div className="session-top">
                         <div>
@@ -943,7 +1016,6 @@ useEffect(() => {
                       </button>
                     </div>
 
-                    {/* Evening Session */}
                     <div className={eveningDetails.cardClass}>
                       <div className="session-top">
                         <div>
@@ -993,7 +1065,7 @@ useEffect(() => {
         <section id="progress-part">
           <div className="recovery-progress">Recovery Progress</div>
           <div className="progress-container">
-            <Body activeRecoveries={activeRecoveries} />
+            <Body activeRecoveries={bodyRecoveries} />
             <div className="right-section">
               <div className="top-row">
                 <div className="middle-progress-section">
@@ -1106,12 +1178,6 @@ useEffect(() => {
             </div>
           </div>
         </section>
-
-        <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <button className="primary-btn" onClick={() => openExercise(null, null, 'rotatorCuffRepair')} style={{ padding: '12px 28px' }}>
-            Quick Start: Side Arm Raise
-          </button>
-        </div>
       </main>
 
       <ExerciseModal
@@ -1126,6 +1192,11 @@ useEffect(() => {
         sessionType={activeExerciseSession?.sessionType}
         userId={user?.id}
         onChallengeComplete={handleChallengeComplete}
+        completedExerciseIds={
+          activeRecoveries.find(r => r.id === activeExerciseSession?.recoveryId)?.[
+          activeExerciseSession?.sessionType === 'morning' ? 'morning_completed_ids' : 'evening_completed_ids'
+          ] ?? []
+        }
       />
     </>
   );

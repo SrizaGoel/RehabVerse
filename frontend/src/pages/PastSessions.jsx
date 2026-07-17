@@ -12,7 +12,22 @@ const activityNames = {
   belle_pose: "Belle Pose",
   step_stones: "Step Stones",
 };
-
+const surgeryNames = {
+  rotatorCuffRepair: "Rotator Cuff Repair",
+  frozenShoulder: "Frozen Shoulder",
+  shoulderArthroscopy: "Shoulder Arthroscopy",
+  shoulderReplacement: "Shoulder Replacement",
+  labrumRepair: "Labrum Repair",
+  tennisElbow: "Tennis Elbow",
+  golferElbow: "Golfer's Elbow",
+  elbowArthroscopy: "Elbow Arthroscopy",
+  distalBicepsRepair: "Distal Biceps Repair",
+  tricepsRepair: "Triceps Repair",
+  aclReconstruction: "ACL Reconstruction",
+  meniscusRepair: "Meniscus Repair",
+  kneeReplacement: "Knee Replacement",
+  patellarRepair: "Patellar Repair",
+};
 const metricLabels = {
   rom_goal: "ROM Goal",
   max_angle: "Maximum Angle",
@@ -48,19 +63,7 @@ export default function PastSessions() {
 
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-
-    if (user) {
-      fetchSessions();
-    }
-
-  }, [user]);
-
-  async function fetchSessions() {
+      async function fetchSessions() {
 
     setLoading(true);
 
@@ -83,6 +86,18 @@ export default function PastSessions() {
     setLoading(false);
 
   }
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+
+    if (user) {
+      fetchSessions();
+    }
+
+  }, [user]);
+
+
 
   function formatDate(date) {
 
@@ -172,8 +187,10 @@ function formatMetric(key, value) {
 
             {sessions.map((session) => (
 
-                <div
-                    className={`session-history-card${session.metrics?.missed ? ' missed-card' : ''}`}
+<div
+                    className={`session-history-card${
+                      session.metrics?.missed ? ' missed-card' : session.metrics?.partial ? ' partial-card' : ''
+                    }`}
                     key={session.id}
                 >
 
@@ -181,9 +198,10 @@ function formatMetric(key, value) {
 
                         <div>
 
-                            <h3>
-                                {activityNames[session.activity_id] ??
-                                    session.activity_id}
+<h3>
+                                {session.metrics?.missed || session.metrics?.partial
+                                    ? surgeryNames[session.activity_id] ?? session.activity_id
+                                    : activityNames[session.activity_id] ?? session.activity_id}
                             </h3>
 
                             <div className="session-tags">
@@ -226,11 +244,22 @@ function formatMetric(key, value) {
 
                     </div>
 
-                    {session.metrics?.missed ? (
+{session.metrics?.missed || session.metrics?.partial ? (
                       <div className="section">
-                        <p style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>
-                          No data recorded — this session was missed.
-                        </p>
+                        <h4>{session.metrics.missed ? "Session Missed" : "Partially Completed"}</h4>
+                        <div className="objective-list">
+                          {(session.metrics.exercises || []).map((exId) => {
+                            const done = session.metrics.completed_exercises?.includes(exId);
+                            return (
+                              <div className="objective-row" key={exId}>
+                                <span>{activityNames[exId] ?? exId}</span>
+                                <span className={done ? "success" : "failed"}>
+                                  {done ? "Completed" : "Missed"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     ) : (
                       <>
@@ -241,41 +270,32 @@ function formatMetric(key, value) {
                         <div className="objective-list">
 
                             {
-
-                                Object.entries(
-                                    session.metrics.objectives || {}
-                                ).map(([key, value]) => (
-
-                                    <div
-                                        className="objective-row"
-                                        key={key}
-                                    >
-
-                                        <span>
-
-                                            {
-                                                objectiveLabels[key] ??
-                                                key
-                                            }
-
-                                        </span>
-
-                                        <span
-                                            className={
-                                                value
-                                                    ? "success"
-                                                    : "failed"
-                                            }
+                                Array.isArray(session.metrics?.objectives) ? (
+                                    session.metrics.objectives.map((obj, i) => (
+                                        <div className="objective-row" key={i}>
+                                            <span>{obj.label}</span>
+                                            <span className={obj.completed ? "success" : "failed"}>
+                                                {obj.completed ? "Completed" : "Not Met"}
+                                            </span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    Object.entries(session.metrics?.objectives || {}).map(([key, value]) => (
+                                        <div
+                                            className="objective-row"
+                                            key={key}
                                         >
-
-                                            {value ? "Completed" : "Not Met"}
-
-                                        </span>
-
-                                    </div>
-
-                                ))
-
+                                            <span>
+                                                {objectiveLabels[key] ?? key}
+                                            </span>
+                                            <span
+                                                className={value ? "success" : "failed"}
+                                            >
+                                                {value ? "Completed" : "Not Met"}
+                                            </span>
+                                        </div>
+                                    ))
+                                )
                             }
 
                         </div>
@@ -289,35 +309,32 @@ function formatMetric(key, value) {
                         <div className="metric-grid">
 
                             {
-
-                                Object.entries(
-                                    session.metrics.metrics || {}
-                                ).map(([key, value]) => (
-
-                                    <div
-                                        className="metric-card"
-                                        key={key}
-                                    >
-
-                                        <span className="metric-title">
-
-                                            {
-                                                metricLabels[key] ??
-                                                key.replaceAll("_", " ")
-                                            }
-
-                                        </span>
-
-                                        <span className="metric-value">
-
-                                            {formatMetric(key, value)}
-
-                                        </span>
-
-                                    </div>
-
-                                ))
-
+                                Array.isArray(session.metrics?.metrics) ? (
+                                    session.metrics.metrics.map((m, i) => (
+                                        <div className="metric-card" key={i}>
+                                            <span className="metric-title">{m.label}</span>
+                                            <span className="metric-value">
+                                                {typeof m.value === "number" && !Number.isInteger(m.value)
+                                                    ? Number(m.value.toFixed(2))
+                                                    : m.value} {m.unit || ""}
+                                            </span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    Object.entries(session.metrics?.metrics || {}).map(([key, value]) => (
+                                        <div
+                                            className="metric-card"
+                                            key={key}
+                                        >
+                                            <span className="metric-title">
+                                                {metricLabels[key] ?? key.replaceAll("_", " ")}
+                                            </span>
+                                            <span className="metric-value">
+                                                {formatMetric(key, value)}
+                                            </span>
+                                        </div>
+                                    ))
+                                )
                             }
 
                         </div>

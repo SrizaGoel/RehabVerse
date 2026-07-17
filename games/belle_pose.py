@@ -232,18 +232,18 @@ def draw_target_stick_figure(img, center_x, center_y, offsets, active_pose_name)
 # ──────────────────────────────────────────────
 def main(params=None):
     print("RehabVerse — Belle Pose Starting...")
-    
+
     import copy
-    POSES_local = copy.deepcopy(POSES)
+    active_poses = copy.deepcopy(POSES)
     side = params.get("side", "L") if params else "L"
     if side == "R":
-        for pose in POSES_local:
+        for pose in active_poses:
             if pose["name"] == "Third Position":
                 targets = pose["targets"]
                 targets["l_shoulder"], targets["r_shoulder"] = targets.get("r_shoulder", 85.0), targets.get("l_shoulder", 135.0)
                 targets["l_elbow"], targets["r_elbow"] = targets.get("r_elbow", 160.0), targets.get("l_elbow", 130.0)
                 pose["targets"] = targets
-    POSES = POSES_local
+    # (no reassignment to POSES — just use active_poses from here on)
 
     mp_pose = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
@@ -303,7 +303,7 @@ def main(params=None):
             results = pose.process(rgb)
             
             # Extract active pose configurations
-            active_pose = POSES[current_pose_idx]
+            active_pose = active_poses[current_pose_idx]
             targets = active_pose["targets"]
             
             # Default metrics
@@ -402,7 +402,7 @@ def main(params=None):
             # Post-completion delay before moving to next pose
             if pose_completed and curr_time - completion_banner_time >= 2.5 and not session_complete:
                 next_idx = current_pose_idx + 1
-                if next_idx >= len(POSES):
+                if next_idx >= len(active_poses):
                     # All poses done — session complete!
                     session_complete = True
                     session_complete_time = curr_time
@@ -527,7 +527,7 @@ def main(params=None):
             dot_y = 660
             cv2.putText(frame, "PROGRESS", (965, dot_y - 18), cv2.FONT_HERSHEY_SIMPLEX, 0.34, (140, 130, 155), 1)
             dot_x_start = 975
-            for i, p in enumerate(POSES):
+            for i, p in enumerate(active_poses):
                 dot_cx = dot_x_start + i * 72
                 is_done = p["name"] in poses_completed_set
                 is_active = (i == current_pose_idx and not session_complete)
@@ -686,7 +686,7 @@ def main(params=None):
             elif key == 32:   # SPACE bar — skip current pose
                 if not session_complete:
                     next_idx = current_pose_idx + 1
-                    if next_idx >= len(POSES):
+                    if next_idx >= len(active_poses):
                         session_complete = True
                         session_complete_time = curr_time
                     else:
@@ -724,7 +724,7 @@ def main(params=None):
             "avg_stability": avg_sta,
             "overall_score": overall,
             "poses_completed": len(session_scores),
-            "total_poses": len(POSES)
+            "total_poses": len(active_poses)
         },
         "objectives": {
             "completed": session_complete,

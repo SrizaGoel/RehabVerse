@@ -1,0 +1,16 @@
+{
+  "day_number": 2,
+  "streak": 1,
+  "last_active_date": "2026-07-16",
+  "history": [
+    {
+      "date": "2026-07-16T16:26:04.358568",
+      "session_type": "morning",
+      "side": "R",
+      "reps": 1,
+      "max_rom": 175,
+      "max_hold": 3,
+      "elapsed_seconds": 6
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+appId: com.rehabverse.desktop
+productName: RehabVerse
+copyright: "© 2024 RehabVerse. All rights reserved."
+
+# ── Output ───────────────────────────────────────────────────────────────────
+directories:
+  output: release
+  buildResources: public
+
+# ── Files to include in the Electron app ────────────────────────────────────
+files:
+  - dist/**/*          # Vite production build
+  - electron/**/*      # main.js + preload.js
+  - package.json
+
+# ── Extra resources bundled alongside the app ───────────────────────────────
+# The Python backend folder goes into Resources/ and is accessed at runtime
+# via process.resourcesPath
+extraResources:
+  - from: "../backend/dist/run_server"
+    to: "backend/run_server"
+    filter:
+      - "**/*"
+
+# ── Windows installer (NSIS) ─────────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: "public/icon.ico"
+  # Disable code signing (no certificate — avoids winCodeSign symlink error on Windows)
+  sign: null
+  signingHashAlgorithms: null
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: "public/icon.ico"
+  uninstallerIcon: "public/icon.ico"
+  installerHeaderIcon: "public/icon.ico"
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: RehabVerse
+  include: ""
+
+# ── App metadata ─────────────────────────────────────────────────────────────
+publish: null   # No auto-update for now

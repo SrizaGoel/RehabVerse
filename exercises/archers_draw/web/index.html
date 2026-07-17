@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Archer's Draw</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="stage">
+
+    <!-- ============ INTRO ============ -->
+    <section id="screen-intro" class="screen">
+      <div class="title-badge">
+        <h1 id="intro-title" class="gradient-title">RECLAIM THE TARGET</h1>
+      </div>
+
+      <div class="glass-panel story-panel">
+        <div id="intro-chapter" class="panel-heading accent-blue"></div>
+        <div id="intro-story" class="body-text"></div>
+        <div class="mission-line">Draw your bow arm back and hold at full draw to charge each shot.</div>
+      </div>
+
+      <div class="glass-panel prescription-panel">
+        <div class="rx-header">
+          <span id="intro-day" class="rx-day gold"></span>
+          <span id="intro-streak" class="rx-streak gold"></span>
+        </div>
+        <hr class="rx-divider">
+        <div class="rx-stats">
+          <div class="rx-stat"><div class="rx-label">TARGET DEPTH</div><div id="rx-depth" class="rx-value"></div></div>
+          <div class="rx-stat"><div class="rx-label">HOLD TIME</div><div id="rx-hold" class="rx-value"></div></div>
+          <div class="rx-stat"><div class="rx-label">ARROWS</div><div id="rx-arrows" class="rx-value"></div></div>
+          <div class="rx-stat"><div class="rx-label">TIME LIMIT</div><div id="rx-time" class="rx-value"></div></div>
+        </div>
+        <div class="rx-note">This is a soft time guide - you can keep going past it, or press E to end anytime.</div>
+      </div>
+
+      <div class="blink prompt-text">Press SPACE to draw</div>
+    </section>
+
+    <!-- ============ GAMEPLAY ============ -->
+    <section id="screen-gameplay" class="screen">
+      <img id="camera-feed" alt="camera feed">
+
+      <div class="glass-panel hud-panel">
+        <div id="hud-chapter" class="panel-heading accent-blue"></div>
+        <div class="hud-row">Elbow angle: <span id="hud-angle">--</span> deg</div>
+        <div class="hud-row">Draw depth: <span id="hud-depth" class="quality-text">--</span> deg</div>
+        <div class="hud-row">Shots: <span id="hud-shots" class="gold"></span></div>
+        <div class="hud-row">Best: <span id="hud-best" class="gold"></span></div>
+        <div class="hud-row">Trophies: <span id="hud-trophies" class="gold"></span></div>
+        <div id="hud-last" class="hud-row"></div>
+        <div class="progress-track"><div id="hud-progress-fill" class="progress-fill sea-green-fill"></div></div>
+      </div>
+
+      <div id="timer-box" class="glass-panel timer-box">
+        <div class="timer-label">TIME LEFT</div>
+        <div id="timer-value" class="timer-value">--:--</div>
+      </div>
+
+      <div id="draw-ring-wrap" class="draw-ring-wrap">
+        <svg id="draw-ring" viewBox="0 0 120 120" class="draw-ring">
+          <circle cx="60" cy="60" r="52" class="draw-ring-track"/>
+          <circle id="draw-ring-fill" cx="60" cy="60" r="52" class="draw-ring-fill"/>
+        </svg>
+      </div>
+
+      <div id="prompt-text" class="prompt-text center-prompt"></div>
+    </section>
+
+    <!-- ============ SUMMARY ============ -->
+    <section id="screen-summary" class="screen">
+      <div class="title-badge">
+        <h1 id="summary-title" class="gradient-title"></h1>
+        <div class="summary-subtitle">SESSION SUMMARY</div>
+      </div>
+
+      <div class="gauge-row">
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 160 160" class="gauge">
+            <circle cx="80" cy="80" r="68" class="gauge-track"/>
+            <circle id="gauge-hold" cx="80" cy="80" r="68" class="gauge-fill sea-green-stroke"/>
+          </svg>
+          <div id="gauge-hold-value" class="gauge-value sea-green"></div>
+          <div class="gauge-label">HOLD QUALITY</div>
+        </div>
+
+        <div class="summary-panels">
+          <div class="glass-panel perf-panel">
+            <div class="panel-heading gold">PERFORMANCE</div>
+            <div class="row-line"><span>Shots fired</span><span id="perf-shots" class="row-value"></span></div>
+            <div class="row-line"><span>Clean hits</span><span id="perf-clean" class="row-value sea-green"></span></div>
+            <div class="row-line"><span>Wide shots</span><span id="perf-wide" class="row-value"></span></div>
+            <div class="row-line"><span>Trophies found</span><span id="perf-trophies" class="row-value gold"></span></div>
+            <div class="row-line"><span>Best shot score</span><span id="perf-best" class="row-value gold"></span></div>
+            <div class="row-line"><span>Peak draw depth</span><span id="perf-depth" class="row-value"></span></div>
+            <div class="row-line"><span>Duration</span><span id="perf-duration" class="row-value"></span></div>
+          </div>
+        </div>
+
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 160 160" class="gauge">
+            <circle cx="80" cy="80" r="68" class="gauge-track"/>
+            <circle id="gauge-score" cx="80" cy="80" r="68" class="gauge-fill gold-stroke"/>
+          </svg>
+          <div id="gauge-score-value" class="gauge-value gold"></div>
+          <div class="gauge-label">BEST SCORE</div>
+        </div>
+      </div>
+
+      <div class="glass-panel form-panel">
+        <div class="panel-heading gold">FORM QUALITY</div>
+        <div class="bar-row">
+          <div class="bar-label-row"><span>Draw smoothness (pull back)</span><span id="bar-draw-value" class="row-value"></span></div>
+          <div class="progress-track"><div id="bar-draw-fill" class="progress-fill"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label-row"><span>Release smoothness (controlled return)</span><span id="bar-release-value" class="row-value"></span></div>
+          <div class="progress-track"><div id="bar-release-fill" class="progress-fill"></div></div>
+        </div>
+      </div>
+
+      <div id="chapter-progress-text" class="chapter-progress-text"></div>
+      <div class="progress-track wide-track"><div id="chapter-progress-fill" class="progress-fill gold-fill"></div></div>
+
+      <div id="summary-meta" class="meta-text"></div>
+      <div class="blink prompt-text">R: Play Again &nbsp;&nbsp; T: Records &nbsp;&nbsp; Esc: Quit</div>
+    </section>
+
+    <!-- ============ RECORDS ============ -->
+    <section id="screen-records" class="screen">
+      <div class="title-badge">
+        <h1 class="gradient-title">RECORDS</h1>
+      </div>
+
+      <div id="records-empty" class="body-text center-prompt" style="display:none;">No sessions logged yet.</div>
+
+      <div id="records-content">
+        <div class="records-row">
+          <div class="glass-panel records-panel">
+            <div class="panel-heading accent-blue">TODAY</div>
+            <div class="row-line"><span>Best score</span><span id="rec-today-score" class="row-value gold"></span></div>
+            <div class="row-line"><span>Max shots</span><span id="rec-today-shots" class="row-value gold"></span></div>
+            <div class="row-line"><span>Max clean hits</span><span id="rec-today-clean" class="row-value sea-green"></span></div>
+            <div class="row-line"><span>Sessions</span><span id="rec-today-sessions" class="row-value"></span></div>
+          </div>
+          <div class="glass-panel records-panel">
+            <div class="panel-heading accent-blue">THIS WEEK</div>
+            <div class="row-line"><span>Best score</span><span id="rec-week-score" class="row-value gold"></span></div>
+            <div class="row-line"><span>Max shots</span><span id="rec-week-shots" class="row-value gold"></span></div>
+            <div class="row-line"><span>Max clean hits</span><span id="rec-week-clean" class="row-value sea-green"></span></div>
+            <div class="row-line"><span>Sessions</span><span id="rec-week-sessions" class="row-value"></span></div>
+          </div>
+          <div class="glass-panel records-panel">
+            <div class="panel-heading accent-blue">ALL TIME</div>
+            <div class="row-line"><span>Best score</span><span id="rec-all-score" class="row-value gold"></span></div>
+            <div class="row-line"><span>Max shots</span><span id="rec-all-shots" class="row-value gold"></span></div>
+            <div class="row-line"><span>Max clean hits</span><span id="rec-all-clean" class="row-value sea-green"></span></div>
+            <div class="row-line"><span>Sessions</span><span id="rec-all-sessions" class="row-value"></span></div>
+          </div>
+        </div>
+
+        <div class="glass-panel chart-panel">
+          <div class="panel-heading accent-blue">14-DAY SHOT LOG</div>
+          <canvas id="chart-canvas" width="1160" height="180"></canvas>
+        </div>
+      </div>
+
+      <div class="blink prompt-text">B: Back &nbsp;&nbsp; Esc: Quit</div>
+    </section>
+
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

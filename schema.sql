@@ -111,3 +111,7 @@ create table user_recoveries (
     created_at timestamptz default now()
 
 );
+
+alter table user_recoveries
+  add column morning_completed_ids jsonb not null default '[]'::jsonb,
+  add column evening_completed_ids jsonb not null default '[]'::jsonb;

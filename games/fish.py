@@ -1455,8 +1455,13 @@ SCHEDULE = {
 def load_progress():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE) as f:
-            return json.load(f)
-    return {"week": 1, "day": 1, "history": [], "adaptive_hold": None}
+            p = json.load(f)
+        p.setdefault("last_active_date", None)
+        p.setdefault("adaptive_hold", None)
+        p.setdefault("adaptive_target", None)
+        return p
+    return {"week": 1, "day": 1, "history": [], "adaptive_hold": None,
+            "adaptive_target": None, "last_active_date": None}
 
 def save_progress(p):
     with open(DATA_FILE, "w") as f:
@@ -1469,26 +1474,54 @@ def get_today_config(progress):
     hold_t = times[day - 1]
     if progress.get("adaptive_hold"):
         hold_t = progress["adaptive_hold"]
+    if progress.get("adaptive_target"):
+        target_angle = progress["adaptive_target"]
     return week, day, target_angle, hold_t
 
-def advance_day(progress, fish_caught, avg_stability):
-    week, day, _, hold_t = get_today_config(progress)
+def advance_day(progress, fish_caught, avg_stability, force=False):
+    """Log this session, then move the Week/Day schedule forward at most
+    once per elapsed calendar day. This is what makes two sessions on the
+    SAME day (e.g. morning + evening) share the same target angle and
+    hold time -- the second session just logs its result without pushing
+    the schedule forward again.
+
+    If today's fish count is a regression vs the previous session, BOTH
+    the hold-time requirement AND the target angle ease off for the next
+    (new) day, instead of staying the same or getting harder.
+
+    force=True bypasses the same-day gate -- used only by the debug 's'
+    skip-day key, which is meant to move the schedule regardless of what
+    day it already thinks it is.
+    """
+    today = str(date.today())
+    week, day, target_angle, hold_t = get_today_config(progress)
     hist = progress.get("history", [])
-    hist.append({"week": week, "day": day, "date": str(date.today()),
+    hist.append({"week": week, "day": day, "date": today,
                  "fish": fish_caught, "hold": hold_t,
+                 "target": target_angle,
                  "stability": round(avg_stability, 1)})
     progress["history"] = hist[-100:]
+
+    if not force and progress.get("last_active_date") == today:
+        # Already advanced the schedule today - just keep the session log.
+        save_progress(progress)
+        return
+
     # regression check: if today's catch count dropped vs last session,
-    # ease the hold requirement next time instead of punishing progress
+    # ease BOTH the hold requirement and the target angle next time
+    # instead of punishing progress with an unchanged/harder session.
     if len(hist) >= 2 and fish_caught < hist[-2]["fish"]:
-        progress["adaptive_hold"] = max(5, int(hold_t * 0.8))
+        progress["adaptive_hold"]   = max(5,  int(hold_t * 0.8))
+        progress["adaptive_target"] = max(10, int(target_angle - 10))
     else:
-        progress["adaptive_hold"] = None
+        progress["adaptive_hold"]   = None
+        progress["adaptive_target"] = None
     if day >= 7:
         progress["week"] = week + 1
         progress["day"]  = 1
     else:
         progress["day"]  = day + 1
+    progress["last_active_date"] = today
     save_progress(progress)
 
 # ════════════════════════════════════════════════════════════
@@ -1530,10 +1563,6 @@ def elbow_angle(lm, side, W, H):
 #  Converts angle variance during a hold attempt into a 0-100
 #  "steadiness" score. A perfectly still arm scores ~100;
 #  a wobbling arm (std dev >= ~28deg) scores near 0.
-#  RECALIBRATED: the old 15deg cutoff punished normal hand tremor
-#  and MediaPipe's own frame-to-frame landmark jitter, so the bar
-#  looked "shaky"/red even while holding still. Raised the cutoff
-#  and shortened the reaction window to ~1s of recent motion.
 # ════════════════════════════════════════════════════════════
 class StabilityTracker:
     def __init__(self, window=30):
@@ -1579,16 +1608,9 @@ class Fish:
 
     def reset(self):
         side = random.choice([-1, 1])
-        # side == -1 -> spawn off the RIGHT edge, must swim LEFT (negative vx)
-        # side ==  1 -> spawn off the LEFT  edge, must swim RIGHT (positive vx)
         self.x  = float(self.W + 70) if side == -1 else -70.0
-        # fish swim in the LOWER 60% of screen
         self.y  = float(random.randint(int(self.H * 0.35), int(self.H * 0.88)))
-        speed   = random.uniform(80, 160)          # px/sec
-        # FIXED: previously `speed * (-side)` sent every fish swimming
-        # AWAY from the screen the instant it spawned, so it re-triggered
-        # reset() on the very next frame and never became visible.
-        # It must move TOWARD the screen, i.e. in the direction of `side`.
+        speed   = random.uniform(80, 160)
         self.vx = speed * side
         self.vy = random.uniform(-20, 20)
         self.sz = random.randint(24, 44)
@@ -1618,37 +1640,31 @@ class Fish:
         facing = 1 if self.vx > 0 else -1
         wag = int(math.sin(self.phase) * s * 0.35)
 
-        # ── tail ──
         tx = x - facing * s
         tail = np.array([[tx, y + wag],
                          [tx - facing * (s//2), y - s//2 + wag//2],
                          [tx - facing * (s//2), y + s//2 + wag//2]], np.int32)
         cv2.fillPoly(frame, [tail], c)
 
-        # ── body ──
         cv2.ellipse(frame, (x, y), (s, s//2), 0, 0, 360, c, -1)
         hc = tuple(min(255, v + 80) for v in c)
         cv2.ellipse(frame, (x - facing*4, y + 3), (s//2, s//4), 0, 0, 360, hc, -1)
         cv2.ellipse(frame, (x, y), (s, s//2), 0, 0, 360, (0,0,0), 1)
 
-        # ── dorsal fin ──
         fin = np.array([[x,              y - s//2],
                         [x + facing*s//3, y - s + 4],
                         [x - facing*s//4, y - s//2]], np.int32)
         dc = tuple(max(0, v-60) for v in c)
         cv2.fillPoly(frame, [fin], dc)
 
-        # ── eye ──
         ex = x + facing * (s - 6)
         cv2.circle(frame, (ex, y - 3), 5, (255,255,255), -1)
         cv2.circle(frame, (ex + facing, y - 3), 2, (0,0,0), -1)
 
-        # ── scales ──
         for sx_off in range(-s//2 + 4, s//2 - 4, 8):
             cv2.ellipse(frame, (x + sx_off, y), (5, 3), 0, 0, 180,
                         tuple(max(0, v-30) for v in c), 1)
 
-        # ── lock glow ──
         if self.locked:
             cv2.circle(frame, (x, y), s + 10, (0, 255, 255), 2, cv2.LINE_AA)
             cv2.circle(frame, (x, y), s + 18, (0, 180, 180), 1, cv2.LINE_AA)
@@ -1675,12 +1691,6 @@ class Bubble:
 
 # ════════════════════════════════════════════════════════════
 #  WATER BACKGROUND
-#  FIXED: this used to do `frame[row, :] = (...)`, which HARD
-#  OVERWRITES every camera pixel with a flat gradient — the real
-#  video of you (and your hand/arm) was being erased every frame
-#  before anything else was drawn. Now we build the gradient on a
-#  separate overlay buffer and blend it over the real frame with
-#  addWeighted, so you stay visible underneath an underwater tint.
 # ════════════════════════════════════════════════════════════
 def draw_water(frame, W, H, tint_strength=0.40):
     t = time.time()
@@ -1701,10 +1711,8 @@ def draw_water(frame, W, H, tint_strength=0.40):
         r = int(40  - 20 * depth)
         overlay[row, :] = (max(0,b), max(0,g), max(0,r))
 
-    # blend tint over the REAL camera image instead of replacing it
     cv2.addWeighted(overlay, tint_strength, frame, 1 - tint_strength, 0, frame)
 
-    # shimmer + caustics drawn directly onto the (now tinted) real frame
     for i in range(0, W, 10):
         yo = int(math.sin(t * 2.5 + i * 0.06) * 3)
         cv2.line(frame, (i, waterline + yo), (i + 10, waterline + yo),
@@ -1980,7 +1988,7 @@ def draw_session_end(frame, fish_caught, fish_needed, week, day,
         cv2.circle(frame, (gx + gw, gy + gh - int(vals[-1]*gh/top) - 2), 4, (0,200,150), -1)
 
     if adapted:
-        txt("* Hold time reduced (adaptive)", cx + 40, cy + CH - 50, 0.44, (0,200,255))
+        txt("* Difficulty reduced (adaptive)", cx + 40, cy + CH - 50, 0.44, (0,200,255))
 
     txt("Press Q/Esc to save & exit    R to replay", cx + 55, cy + CH - 22,
         0.48, (120,200,120))
@@ -2000,7 +2008,7 @@ def main(params=None):
 
     progress = load_progress()
     week, day, target_angle, hold_t = get_today_config(progress)
-    adapted = progress.get("adaptive_hold") is not None
+    adapted = (progress.get("adaptive_hold") is not None) or (progress.get("adaptive_target") is not None)
 
     FISH_NEEDED   = 5
     TOLERANCE     = 12     # ± degrees
@@ -2018,35 +2026,25 @@ def main(params=None):
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-    # Many webcams ignore the requested resolution above, so trust a real
-    # captured frame's shape rather than cap.get(), or landmarks get
-    # scaled to the wrong canvas and everything draws off-screen.
     ret0, probe_frame = cap.read()
     if not ret0:
         print("Could not read a frame from the camera."); cap.release(); return
     H, W = probe_frame.shape[:2]
     print(f"Camera actual frame size: {W}x{H}")
 
-    # ── detect the real screen size so we can fill it properly ──
-    # NOTE: previously the window just opened at raw camera size
-    # (often 640x480) with no fullscreen call at all, hence "random
-    # small window". We now query the OS screen resolution and put
-    # the app into a real fullscreen window, letterboxed (not
-    # stretched/distorted) to fit.
     try:
         import tkinter as _tk
         _root = _tk.Tk()
         SCREEN_W, SCREEN_H = _root.winfo_screenwidth(), _root.winfo_screenheight()
         _root.destroy()
     except Exception:
-        SCREEN_W, SCREEN_H = 1920, 1080   # sane fallback if tkinter isn't available
+        SCREEN_W, SCREEN_H = 1920, 1080
 
     WINDOW_NAME = "Elbow Fishing Rehab"
     cv2.namedWindow(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     def fit_to_screen(img):
-        """Scale + letterbox img to fill the screen without distortion."""
         h, w = img.shape[:2]
         scale = min(SCREEN_W / w, SCREEN_H / h)
         nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
@@ -2065,8 +2063,8 @@ def main(params=None):
     hold_accum  = 0.0
     hold_prog   = 0.0
     catch_stabilities = []
-    avg_stability = 100.0   # default; updated after every catch
-    smoother    = AngleSmoother(alpha=0.14)   # was 0.2 — heavier smoothing = less jitter
+    avg_stability = 100.0
+    smoother    = AngleSmoother(alpha=0.14)
     stability   = StabilityTracker()
     stab_score  = 100.0
     angle_val   = 0.0
@@ -2120,19 +2118,29 @@ def main(params=None):
             elbow_px = (int(lm[el_idx].x * W), int(lm[el_idx].y * H))
 
             if on_target and not SESSION_DONE:
-                nearest, best_d = None, float('inf')
-                for f in fishes:
-                    if f.caught: continue
-                    d = math.hypot(f.x - elbow_px[0], f.y - elbow_px[1])
-                    if d < best_d:
-                        best_d = d; nearest = f
-
-                if nearest:
-                    if locked_fish is not nearest:
+                # FIX: only pick a NEW fish to lock onto when we don't
+                # already have one locked (or the locked one was just
+                # caught). Previously this block re-picked the globally
+                # nearest fish every single frame, so as soon as ANY
+                # other fish swam a pixel closer than the one you were
+                # already holding, the lock silently jumped to it and
+                # hold_accum/stability reset back to zero -- that's the
+                # "timer restarts whenever a new fish shows up" bug.
+                # Now the same fish is held for the entire hold duration.
+                if locked_fish is None or locked_fish.caught:
+                    nearest, best_d = None, float('inf')
+                    for f in fishes:
+                        if f.caught: continue
+                        d = math.hypot(f.x - elbow_px[0], f.y - elbow_px[1])
+                        if d < best_d:
+                            best_d = d; nearest = f
+                    if nearest:
                         locked_fish = nearest
                         hold_accum  = 0.0
                         stability.reset()
-                    nearest.locked = True
+
+                if locked_fish:
+                    locked_fish.locked = True
 
                     stability.add(angle_val)
                     stab_score = stability.score()
@@ -2141,10 +2149,10 @@ def main(params=None):
                     hold_prog = min(1.0, hold_accum / hold_t)
 
                     if hold_accum >= hold_t:
-                        splashes.append((int(nearest.x), int(nearest.y), now))
+                        splashes.append((int(locked_fish.x), int(locked_fish.y), now))
                         catch_banner = (f"FISH CAUGHT!  Stability {stab_score:.0f}%", now)
                         catch_stabilities.append(stab_score)
-                        nearest.caught = True
+                        locked_fish.caught = True
                         fish_caught   += 1
                         locked_fish    = None
                         hold_accum     = 0.0
@@ -2218,10 +2226,10 @@ def main(params=None):
             stability.reset()
             smoother     = AngleSmoother(0.14)
         elif key == ord('s'):   # debug: skip day
-            advance_day(progress, fish_caught, avg_stability)
+            advance_day(progress, fish_caught, avg_stability, force=True)
             progress = load_progress()
             week, day, target_angle, hold_t = get_today_config(progress)
-            adapted = progress.get("adaptive_hold") is not None
+            adapted = (progress.get("adaptive_hold") is not None) or (progress.get("adaptive_target") is not None)
             SESSION_DONE = False; fish_caught = 0
             catch_stabilities = []
             print(f"Skipped to W{week} D{day}")
@@ -2229,26 +2237,26 @@ def main(params=None):
     cap.release()
     cv2.destroyAllWindows()
 
+    from datetime import datetime
     session_result = {
+        "game": "fishing",
+        "completed": fish_caught >= FISH_NEEDED,
+        "timestamp": datetime.now().isoformat(),
         "session": {
             "week": progress.get("week", week),
             "day": progress.get("day", day),
             "slot": params.get("session_type", "morning") if params else "morning",
         },
-        "metrics": {
-            "rom_goal": target_angle,
-            "max_angle": target_angle,
-            "hold_target": hold_t,
-            "hold_time": hold_accum,
-            "repetitions": fish_caught,
-            "rep_target": FISH_NEEDED,
-            "stability": avg_stability
-        },
-        "objectives": {
-            "rom_met": fish_caught >= FISH_NEEDED,
-            "hold_met": fish_caught >= FISH_NEEDED,
-            "reps_met": fish_caught >= FISH_NEEDED
-        }
+        "objectives": [
+            { "label": "Flexion Target Met", "completed": fish_caught >= FISH_NEEDED },
+            { "label": "Hold Target Met", "completed": fish_caught >= FISH_NEEDED }
+        ],
+        "metrics": [
+            { "label": "Flexion Target", "value": target_angle, "unit": "°" },
+            { "label": "Hold Target", "value": hold_t, "unit": "s" },
+            { "label": "Fish Collected", "value": fish_caught, "unit": "" },
+            { "label": "Average Stability", "value": round(avg_stability, 1), "unit": "%" }
+        ]
     }
     return session_result
 
